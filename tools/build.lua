@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.4.0"
+M.VERSION = "1.4.1"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -95,8 +95,10 @@ M.LAYOUT = {
 	small = 34,               -- cooldown row
 	reminder = 36,
 	proc = 44, procSmall = 36, -- procs, left of the rotation row
-	cast = 16,                -- cast bar height (as wide as the rotation row)
-	mana = 12,                -- mana bar height (room for the numbers)
+	barWidth = 420,           -- cast and mana bars (wider than the rotation row, owner: easier to read)
+	cast = 22,                -- cast bar height
+	mana = 16,                -- mana bar height
+	castFont = 13, manaFont = 11,
 	gap = 6,                  -- between rows
 	expire = 3,               -- seconds left when a DoT starts to glow
 	execute = 20,             -- target health % below which SW: Death gets the execute frame
@@ -470,8 +472,8 @@ local function castBar(id, parent, width, height, x, y)
 		{ trigger = { type = "unit", event = "Cast", unit = "player", use_unit = true, spellNames = {} }, untrigger = {} },
 		activeTriggerMode = 1, disjunctive = "all",
 	}
-	local name = text("%n", "INNER_LEFT", 10, 4, 0)
-	local time = text("%p", "INNER_RIGHT", 10, -4, 0)
+	local name = text("%n", "INNER_LEFT", M.LAYOUT.castFont, 5, 0)
+	local time = text("%p", "INNER_RIGHT", M.LAYOUT.castFont, -5, 0)
 	time.text_text_format_p_time_precision = 1 -- 1.4 rather than 1
 	time.text_text_format_p_time_dynamic_threshold = 0
 	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), name, time }
@@ -503,11 +505,11 @@ local function manaBar(id, parent, width, height, x, y)
 	-- Left: your mana, shortened by the game (4,300 -> "4.3K"); Blizzard's
 	-- AbbreviateNumbers accepts the hidden numbers of combat
 	-- (SecretArguments = "AllowedWhenTainted" in its API documentation).
-	local amount = text("%p", "INNER_LEFT", 9, 3, 0)
+	local amount = text("%p", "INNER_LEFT", M.LAYOUT.manaFont, 4, 0)
 	amount.text_text_format_p_format = "BigNumber"
 	amount.text_text_format_p_big_number_format = "AbbreviateNumbers"
 	-- Right: the percentage.
-	local pct = text("%percentpower%%", "INNER_RIGHT", 9, -3, 0)
+	local pct = text("%percentpower%%", "INNER_RIGHT", M.LAYOUT.manaFont, -4, 0)
 	pct.text_text_format_percentpower_format = "Number"
 	pct.text_text_format_percentpower_decimal_precision = 0
 	pct.text_text_format_percentpower_round_type = "floor"
@@ -638,19 +640,22 @@ function M.Build()
 		shieldID, L.procSmall, 0, -cell, { unit = "player", debuff = true, mine = true, showOn = "showOnActive",
 			total = 15, known = S.shield.id, borderColour = M.COLOURS.missing }))
 
-	-- Cast bar right under the rotation row, as wide as the row, with two
-	-- lines at a third and two thirds while channelling (Mind Flay: 3 s,
-	-- one tick a second in Forever's data).
-	local castY = -(L.big / 2 + L.gap + L.cast / 2)
-	add(castBar(castID, P, rowWidth, L.cast, 0, castY))
+	-- Cast bar under the rotation row, with two lines at a third and two
+	-- thirds while channelling (Mind Flay: 3 s, one tick a second in Forever's
+	-- data).
+	-- The bars are wider than the rotation row, so they go under the procs
+	-- and shield blocks (two icons deep), not just under the row.
+	local blockBottom = math.min(-L.big / 2, -(cell + L.procSmall / 2))
+	local castY = blockBottom - (L.gap + L.cast / 2)
+	add(castBar(castID, P, L.barWidth, L.cast, 0, castY))
 	local tickIDs = {}
 	for i = 1, 2 do
-		tickIDs[i] = add(tickLine(P .. " | Cast bar tick " .. i, P, L.cast, -rowWidth / 2 + rowWidth * i / 3, castY))
+		tickIDs[i] = add(tickLine(P .. " | Cast bar tick " .. i, P, L.cast, -L.barWidth / 2 + L.barWidth * i / 3, castY))
 	end
 
 	-- Mana bar, thin, right under the cast bar.
 	local manaY = castY - (L.cast / 2 + 2 + L.mana / 2)
-	add(manaBar(manaID, P, rowWidth, L.mana, 0, manaY))
+	add(manaBar(manaID, P, L.barWidth, L.mana, 0, manaY))
 
 	-- Cooldown row under the bars: only while cooling down, so it is empty
 	-- when everything is ready. Your race's priest spells join it.

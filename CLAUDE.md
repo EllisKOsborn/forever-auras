@@ -16,7 +16,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026, v1.4.0)
+## Status (17 Nov 2026, v1.4.1)
 - **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
   "works fine it seems" (no item-by-item report yet).
 - **Shadow Priest v1.1.0**: cast bar (owner's request). v1.2.0 renamed to
@@ -31,6 +31,8 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   exact kill prediction isn't possible), clickable reminders out of combat
   with an in-combat Shadowform warning, Divine Spirit + race self-buff
   reminders. 45 displays.
+- **v1.4.1** (owner: bars too small): cast/mana bars `L.barWidth` 420, heights
+  22/16, fonts 13/11; placed under the procs/shield blocks (`blockBottom`).
 - `tests/fa-check.lua` (runs FA's real `Display.Validate`) was written but
   **not run**: running downloaded third-party code was blocked in the cloud
   session. Ask the owner before running it, or before adding it to CI.

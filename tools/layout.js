@@ -76,9 +76,9 @@ body{margin:0;background:#101014;font-family:Arial,Helvetica,sans-serif}
 .s{position:relative;width:${W}px;height:${H}px;overflow:hidden}
 .t{position:absolute;box-sizing:border-box;border:1px solid #000;color:#eee;display:flex;
 align-items:center;justify-content:center;text-align:center;line-height:1.05;padding:1px;overflow:visible}
-.t.bar,.t.mana{justify-content:space-between;padding:0 4px;font-size:10px}
+.t.bar,.t.mana{justify-content:space-between;padding:0 5px;font-size:13px}
 .t.bar{background:linear-gradient(90deg,#8e66e6 0 62%,#1a1426 62%)}
-.t.mana{background:linear-gradient(90deg,#3f84ff 0 64%,#101830 64%);font-size:8px}
+.t.mana{background:linear-gradient(90deg,#3f84ff 0 64%,#101830 64%);font-size:11px}
 .t.missing{background:#333 !important;color:#888;border:1px solid #d9332a !important;box-shadow:0 0 0 1px #d9332a}
 .t.expiring{box-shadow:0 0 0 2px #ffd15a,0 0 8px 2px rgba(255,209,90,.6)}
 .t.ready{box-shadow:0 0 0 2px #b885ff,0 0 8px 2px rgba(184,133,255,.6)}

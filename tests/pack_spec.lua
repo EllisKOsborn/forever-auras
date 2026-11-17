@@ -486,15 +486,26 @@ describe("Shadow priest pack", function()
 			assert.is_nil(bar.load.use_spellknown)
 		end)
 
-		it("is as wide as the rotation row and sits between it and the cooldowns", function()
+		it("is wider than the rotation row, centred, and clear of everything above and below", function()
 			local rot = byId[B.PREFIX .. " | Rotation"]
 			local first, last = byId[rot.controlledChildren[1]], byId[rot.controlledChildren[#rot.controlledChildren]]
 			local left, right = first.xOffset - first.width / 2, last.xOffset + last.width / 2
-			assert.equal(right - left, bar.width)
+			assert.is_true(bar.width > right - left)
+			assert.equal(B.LAYOUT.barWidth, bar.width)
 			assert.equal(0, bar.xOffset)
-			local rowBottom = rot.yOffset - first.height / 2
-			assert.is_true(bar.yOffset + bar.height / 2 < rowBottom, "overlaps the rotation row")
+			local barTop, barLeft, barRight = bar.yOffset + bar.height / 2, -bar.width / 2, bar.width / 2
+			-- Nothing in the rotation row, the procs block or the shield block overlaps it.
+			for _, groupName in ipairs({ "Rotation", "Procs", "Shield" }) do
+				local g = byId[B.PREFIX .. " | " .. groupName]
+				for _, id in ipairs(g.controlledChildren) do
+					local d = byId[id]
+					local x, y = g.xOffset + d.xOffset, g.yOffset + d.yOffset
+					local overlapX = x + d.width / 2 > barLeft and x - d.width / 2 < barRight
+					assert.is_true(not overlapX or y - d.height / 2 > barTop, id .. " overlaps the cast bar")
+				end
+			end
 			local mana = byId[B.PREFIX .. " | Mana bar"]
+			assert.equal(bar.width, mana.width)
 			assert.is_true(bar.yOffset - bar.height / 2 > mana.yOffset + mana.height / 2, "overlaps the mana bar")
 			local cds = byId[B.PREFIX .. " | Cooldowns"]
 			local cdTop = cds.yOffset + byId[cds.controlledChildren[1]].height / 2
