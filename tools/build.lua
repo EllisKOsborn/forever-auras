@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.0.0"
+M.VERSION = "1.1.0"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -55,6 +55,8 @@ M.LAYOUT = {
 	big = 44, step = 48,      -- rotation row
 	small = 34,               -- cooldown row
 	reminder = 36,
+	cast = 16,                -- cast bar height (as wide as the rotation row)
+	gap = 6,                  -- between rows
 }
 
 -- uid: 11 characters like ForeverAuras' own, but fixed per display name.
@@ -247,9 +249,44 @@ local function cooldownIcon(id, parent, size, x, y, spell, showOn)
 	return d
 end
 
+-- Cast bar: ForeverAuras' "Cast" trigger. When Forever hides a cast's
+-- details in combat, ForeverAuras hands the game a duration object and the
+-- game moves the bar itself (Prototypes.lua, UnitCastingDuration /
+-- UnitChannelDuration), so it keeps working in fights. Channels such as Mind
+-- Flay drain from full, as the game's own bar does.
+local function castBar(id, parent, width, height, x, y)
+	local d = base(id, parent, "aurabar")
+	d.width, d.height = width, height
+	d.xOffset, d.yOffset = x, y
+	d.load = load()
+	d.orientation, d.inverse = "HORIZONTAL", false
+	d.texture, d.textureSource = "Blizzard", "LSM"
+	d.barColor, d.barColor2 = color(0.58, 0.40, 0.90, 1), color(1, 1, 1, 1)
+	d.backgroundColor = color(0.04, 0.03, 0.07, 0.85)
+	d.enableGradient, d.gradientOrientation = false, "HORIZONTAL"
+	d.icon, d.iconSource, d.icon_side, d.icon_color = false, -1, "LEFT", color(1, 1, 1, 1)
+	d.desaturate, d.zoom = false, 0
+	d.spark, d.sparkTexture, d.sparkColor = true, "Interface\\CastingBar\\UI-CastingBar-Spark", color(1, 1, 1, 1)
+	d.sparkBlendMode, d.sparkWidth, d.sparkHeight = "ADD", 8, height * 2
+	d.sparkOffsetX, d.sparkOffsetY, d.sparkRotation, d.sparkRotationMode, d.sparkHidden = 0, 0, 0, "AUTO", "NEVER"
+	d.progressSource = { -1, "" }
+	d.adjustedMin, d.adjustedMax = "", ""
+	d.triggers = {
+		{ trigger = { type = "unit", event = "Cast", unit = "player", use_unit = true, spellNames = {} }, untrigger = {} },
+		activeTriggerMode = 1, disjunctive = "all",
+	}
+	local name = text("%n", "INNER_LEFT", 10, 4, 0)
+	local time = text("%p", "INNER_RIGHT", 10, -4, 0)
+	time.text_text_format_p_time_precision = 1 -- 1.4 rather than 1
+	time.text_text_format_p_time_dynamic_threshold = 0
+	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, name, time }
+	return d
+end
+
 function M.Build()
 	local S, L, P = M.SPELLS, M.LAYOUT, M.PREFIX
 	local rotationID, cooldownID, reminderID = P .. " | Rotation", P .. " | Cooldowns", P .. " | Reminders"
+	local castID = P .. " | Cast bar"
 	local children = {}
 	local function add(d) children[#children + 1] = d return d.id end
 
@@ -273,9 +310,13 @@ function M.Build()
 		{ unit = "target", debuff = true, mine = false, spells = { S.weaving.id }, showOn = "showAlways",
 			known = S.weavingTalent.id, stacks = true, timer = false }))
 
-	-- Cooldown row under it: only while cooling down, so it is empty when
-	-- everything is ready.
-	local cds = row(cooldownID, P, 0, -(L.big / 2 + 6 + L.small / 2), {})
+	-- Cast bar right under the rotation row, as wide as the row.
+	local castY = -(L.big / 2 + L.gap + L.cast / 2)
+	add(castBar(castID, P, 6 * L.step - (L.step - L.big), L.cast, 0, castY))
+
+	-- Cooldown row under the cast bar: only while cooling down, so it is
+	-- empty when everything is ready.
+	local cds = row(cooldownID, P, 0, castY - (L.cast / 2 + L.gap + L.small / 2), {})
 	add(cds)
 	for _, key in ipairs({ "silence", "scream", "fade", "focus" }) do
 		local s = S[key]
@@ -299,10 +340,10 @@ function M.Build()
 		{ unit = "player", spells = { S.fort.id, S.prayerFort.id }, showOn = "showOnMissing", known = S.fort.id, timer = false }))
 
 	-- The root holds the three parts; it is placed below the character.
-	local root = group(P, nil, 0, L.rootY, { rotationID, cooldownID, reminderID })
+	local root = group(P, nil, 0, L.rootY, { rotationID, castID, cooldownID, reminderID })
 	root.desc = "Short Royalty shadow priest pack " .. M.VERSION .. ". Rotation (Shadow Word: Pain, Devouring Plague, "
-		.. "Mind Blast, Shadow Word: Death, Vampiric Embrace, Shadow Weaving), cooldowns and missing-buff reminders. "
-		.. "Priests only; spells you don't know yet stay hidden."
+		.. "Mind Blast, Shadow Word: Death, Vampiric Embrace, Shadow Weaving), cast bar, cooldowns and missing-buff "
+		.. "reminders. Priests only; spells you don't know yet stay hidden."
 	root.groupIcon = "Interface\\Icons\\Spell_Shadow_Shadowform"
 
 	-- Children are listed group first, then that group's displays (the order
@@ -312,7 +353,7 @@ function M.Build()
 	for _, gid in ipairs(root.controlledChildren) do
 		local g = byId[gid]
 		ordered[#ordered + 1] = g
-		for _, cid in ipairs(g.controlledChildren) do ordered[#ordered + 1] = byId[cid] end
+		for _, cid in ipairs(g.controlledChildren or {}) do ordered[#ordered + 1] = byId[cid] end
 	end
 	return { m = "d", v = 2000, s = M.FA_VERSION, d = root, c = ordered }
 end
@@ -383,12 +424,13 @@ local function main(args)
 		for _, d in ipairs(t.c) do byId[d.id] = d end
 		local rows = {}
 		for _, d in ipairs(t.c) do
-			if d.regionType == "icon" then
+			if d.regionType == "icon" or d.regionType == "aurabar" then
 				local x, y, p = d.xOffset, d.yOffset, byId[d.parent]
 				local dynamic = p.regionType == "dynamicgroup"
+				local rowName = p == t.d and d.id:match("| ([^|]+)$") or d.parent:match("| ([^|]+)$")
 				while p do x, y, p = x + p.xOffset, y + p.yOffset, byId[p.parent] end
-				rows[#rows + 1] = ('{"name":"%s","x":%g,"y":%g,"size":%g,"row":"%s","dynamic":%s}'):format(
-					d.id:match("| ([^|]+)$"), x, y, d.width, d.parent:match("| ([^|]+)$"), tostring(dynamic))
+				rows[#rows + 1] = ('{"name":"%s","x":%g,"y":%g,"w":%g,"h":%g,"row":"%s","dynamic":%s}'):format(
+					d.id:match("| ([^|]+)$"), x, y, d.width, d.height, rowName, tostring(dynamic))
 			end
 		end
 		print("[" .. table.concat(rows, ",") .. "]")

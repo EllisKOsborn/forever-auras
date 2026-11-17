@@ -1,5 +1,12 @@
 # Changelog
 
+## Shadow Priest v1.1.0 (17 Nov 2026)
+- **Cast bar** under the rotation row, as wide as the row: spell name on the
+  left, time left on the right, shown only while casting or channelling.
+  Uses ForeverAuras' Cast trigger, which lets the game move the bar in combat.
+  Not tested in game yet.
+- The cooldown row moved down under the cast bar.
+
 ## Shadow Priest v1.0.0 (17 Nov 2026)
 First version, not tested in game yet.
 - Rotation row: Shadow Word: Pain, Devouring Plague, Vampiric Embrace (your

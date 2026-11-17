@@ -272,6 +272,50 @@ describe("Shadow priest pack", function()
 			"Vampiric Embrace", "Shadow Weaving" }, order)
 	end)
 
+	describe("cast bar", function()
+		local bar, byId
+		setup(function()
+			byId = {}
+			for _, d in ipairs(pack.c) do byId[d.id] = d end
+			bar = byId[B.PREFIX .. " | Cast bar"]
+		end)
+
+		it("is a bar with ForeverAuras' Cast trigger on you", function()
+			assert.truthy(bar)
+			assert.equal("aurabar", bar.regionType)
+			local t = trig(bar)
+			assert.equal("unit", t.type)
+			assert.equal("Cast", t.event)
+			assert.equal("player", t.unit)
+			assert.is_true(t.use_unit)
+			assert.equal(B.PREFIX, bar.parent)
+		end)
+
+		it("shows the spell name and the time left", function()
+			local texts = {}
+			for _, s in ipairs(bar.subRegions) do if s.type == "subtext" then texts[s.text_text] = s.anchor_point end end
+			assert.equal("INNER_LEFT", texts["%n"])
+			assert.equal("INNER_RIGHT", texts["%p"])
+		end)
+
+		it("loads for every priest, with no spell needed", function()
+			assert.is_nil(bar.load.use_spellknown)
+		end)
+
+		it("is as wide as the rotation row and sits between it and the cooldowns", function()
+			local rot = byId[B.PREFIX .. " | Rotation"]
+			local first, last = byId[rot.controlledChildren[1]], byId[rot.controlledChildren[#rot.controlledChildren]]
+			local left, right = first.xOffset - first.width / 2, last.xOffset + last.width / 2
+			assert.equal(right - left, bar.width)
+			assert.equal(0, bar.xOffset)
+			local rowBottom = rot.yOffset - first.height / 2
+			assert.is_true(bar.yOffset + bar.height / 2 < rowBottom, "overlaps the rotation row")
+			local cds = byId[B.PREFIX .. " | Cooldowns"]
+			local cdTop = cds.yOffset + byId[cds.controlledChildren[1]].height / 2
+			assert.is_true(bar.yOffset - bar.height / 2 > cdTop, "overlaps the cooldown row")
+		end)
+	end)
+
 	it("gives the same uid to the same name every time (imports offer Update)", function()
 		assert.equal(B.Uid("x"), B.Uid("x"))
 		assert.are_not.equal(B.Uid("Short Royalty | Shadow Priest"), B.Uid("Short Royalty | Shadow Priest | Rotation"))

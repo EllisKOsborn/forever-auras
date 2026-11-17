@@ -18,9 +18,12 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026)
-- **Shadow Priest v1.0.0** (`packs/ShadowPriest.txt`, 17 displays), not
-  tested in game. In-game checklist: README "Testing in game".
+## Status (17 Nov 2026, v1.1.0)
+- **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
+  "works fine it seems" (no item-by-item report yet).
+- **Shadow Priest v1.1.0** (`packs/ShadowPriest.txt`, 18 displays): adds a
+  **cast bar** (owner's request), not tested in game. In-game checklist:
+  README "Testing in game".
 - `tests/fa-check.lua` (runs FA's real `Display.Validate`) was written but
   **not run**: running downloaded third-party code was blocked in the cloud
   session. Ask the owner before running it, or before adding it to CI.
@@ -60,6 +63,11 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   conditions: `faAuraActive` value 0 = Missing look (desaturate, color, zoom,
   alpha, displayIcon), no Else If. A Modern display inside a **dynamic group**
   only gets a warning, so we keep them in plain groups with fixed positions.
+- Cast bar: `type = "unit"`, `event = "Cast"`, `unit = "player"`,
+  `use_unit = true` on an `aurabar`. When cast info is secret in combat, FA
+  uses `UnitCastingDuration`/`UnitChannelDuration` and the game drives the
+  bar (Prototypes.lua `["Cast"]`). Same setup as Forever Aura HUD's Core cast
+  bar. The game's own cast bar is not hidden (would need custom code).
 - Spell cooldowns: `type = "spell"`, event "Cooldown Progress (Spell)";
   native swipe and the game's countdown numbers work in combat; condition
   `onCooldown`.
@@ -83,7 +91,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 ## Layout
 ```
 packs/      import strings (generated)
-tools/      build.lua (the pack, codec, --check, --layout), layout.js (docs/layout.png)
+tools/      build.lua (the pack, codec, --check, --layout), layout.js (docs/layout.png from --layout)
 tests/      pack_spec.lua (busted), fa-check.lua (optional, needs FA source)
 vendor/     LibStub, LibSerialize, LibDeflate (from forever-shortroyalty's Libs/)
 docs/       layout.png
