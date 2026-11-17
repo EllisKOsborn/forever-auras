@@ -512,6 +512,73 @@ describe("Shadow priest pack", function()
 			assert.is_true(mana.yOffset - mana.height / 2 > cdTop, "mana bar overlaps the cooldown row")
 		end)
 
+		describe("hides the game's cast bar (Init code, run against a fake game)", function()
+			local function fakeBar()
+				local b = { shownSetting = true, calls = {} }
+				function b.SetAndUpdateShowCastbar(self, show)
+					self.calls[#self.calls + 1] = show
+					self.shownSetting = show
+					for _, hook in ipairs(self.hooks or {}) do hook(self, show) end
+				end
+				return b
+			end
+			local function run(region, config, bars)
+				local env = setmetatable({
+					aura_env = { region = region, config = config },
+					hooksecurefunc = function(obj, method, fn)
+						assert.equal("SetAndUpdateShowCastbar", method)
+						obj.hooks = obj.hooks or {}
+						obj.hooks[#obj.hooks + 1] = fn
+					end,
+				}, { __index = function(_, k) return bars[k] or _G[k] end })
+				env._G = env
+				local fn = assert(loadstring(bar.actions.init.custom))
+				setfenv(fn, env)
+				fn()
+			end
+
+			it("is an option ticked by default", function()
+				assert.equal("toggle", bar.authorOptions[1].type)
+				assert.equal("hideGameCastBar", bar.authorOptions[1].key)
+				assert.is_true(bar.authorOptions[1].default)
+				assert.is_true(bar.config.hideGameCastBar)
+				assert.truthy(bar.authorOptions[1].name and bar.authorOptions[1].width)
+			end)
+
+			it("hides the game's bar on load and keeps it hidden when the game turns it back on", function()
+				local game = fakeBar()
+				run({}, { hideGameCastBar = true }, { PlayerCastingBarFrame = game })
+				assert.is_false(game.shownSetting)
+				game:SetAndUpdateShowCastbar(true) -- e.g. EndReplacingPlayerBar
+				assert.is_false(game.shownSetting)
+			end)
+
+			it("hooks only once when the display loads again", function()
+				local game, region = fakeBar(), {}
+				for _ = 1, 3 do run(region, { hideGameCastBar = true }, { PlayerCastingBarFrame = game }) end
+				assert.equal(1, #game.hooks)
+			end)
+
+			it("brings the game's bar back when unticked", function()
+				local game, region = fakeBar(), {}
+				run(region, { hideGameCastBar = true }, { PlayerCastingBarFrame = game })
+				run(region, { hideGameCastBar = false }, { PlayerCastingBarFrame = game })
+				assert.is_true(game.shownSetting)
+				game:SetAndUpdateShowCastbar(true)
+				assert.is_true(game.shownSetting) -- the hook no longer fights the game
+			end)
+
+			it("leaves the game's bar alone if the option was never on", function()
+				local game = fakeBar()
+				run({}, { hideGameCastBar = false }, { PlayerCastingBarFrame = game })
+				assert.same({}, game.calls)
+			end)
+
+			it("copes with bars that don't exist", function()
+				run({}, { hideGameCastBar = true }, {})
+			end)
+		end)
+
 		it("has two tick lines at a third and two thirds, only while channelling", function()
 			for i = 1, 2 do
 				local tick = byId[B.PREFIX .. " | Cast bar tick " .. i]

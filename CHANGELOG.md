@@ -1,5 +1,10 @@
 # Changelog
 
+## Shadow Priest v1.5.0 (17 Nov 2026)
+- **Hides the game's own cast bar** while the pack is loaded, so you only see
+  the pack's. Untick **Hide the game's cast bar** (`/fa` → Cast bar → Custom
+  Options) to bring it back.
+
 ## Shadow Priest v1.4.1 (17 Nov 2026)
 - Bigger cast and mana bars: 420 px wide (was 284), 22 and 16 px tall (were
   16 and 12), with bigger text. They now sit under the procs and shield

@@ -16,7 +16,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026, v1.4.1)
+## Status (17 Nov 2026, v1.5.0)
 - **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
   "works fine it seems" (no item-by-item report yet).
 - **Shadow Priest v1.1.0**: cast bar (owner's request). v1.2.0 renamed to
@@ -33,6 +33,13 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   reminders. 45 displays.
 - **v1.4.1** (owner: bars too small): cast/mana bars `L.barWidth` 420, heights
   22/16, fonts 13/11; placed under the procs/shield blocks (`blockBottom`).
+- **v1.5.0** (owner): the pack hides the game's cast bar. No game setting
+  exists (Edit Mode cast bar settings: BarSize, LockToPlayerFrame,
+  ShowCastTime). Custom Init on the Cast bar calls
+  `PlayerCastingBarFrame:SetAndUpdateShowCastbar(false)` (Blizzard's own
+  switch; Forever Aura HUD's Casting.lua does the same) and hooks it, since
+  `EndReplacingPlayerBar` turns it back on. Author option (toggle)
+  `hideGameCastBar`, default on; unticking restores the bar once.
 - `tests/fa-check.lua` (runs FA's real `Display.Validate`) was written but
   **not run**: running downloaded third-party code was blocked in the cloud
   session. Ask the owner before running it, or before adding it to CI.
@@ -79,7 +86,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   `use_unit = true` on an `aurabar`. When cast info is secret in combat, FA
   uses `UnitCastingDuration`/`UnitChannelDuration` and the game drives the
   bar (Prototypes.lua `["Cast"]`). Same setup as Forever Aura HUD's Core cast
-  bar. The game's own cast bar is not hidden (would need custom code).
+  bar. The game's own cast bar is hidden by the pack since v1.5.0 (see Status).
 - Looks on Aura (Modern) icons (SecretAuraConditions.lua): `subborder`
   `border_color` may change with Aura Active = false; a `subglow` may be
   turned on by `faAuraRemaining` with op `"<"` and a value > 0 (the game

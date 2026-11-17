@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.4.1"
+M.VERSION = "1.5.0"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -165,6 +165,38 @@ watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterUnitEvent("UNIT_AURA", "player")
 watcher:SetScript("OnEvent", update)
 update()
+]]
+
+-- Hide the game's own cast bar while the pack is loaded (custom Init on the
+-- pack's cast bar). There is no game setting for it; Blizzard's own code
+-- turns the player cast bar off with SetAndUpdateShowCastbar(false)
+-- (Blizzard_UIPanels_Game CastingBarFrame.lua, used when another bar replaces
+-- it), and Forever Aura HUD hides it the same way. The game turns it back on
+-- after special UIs (EndReplacingPlayerBar), so a hook keeps it off. The
+-- "Hide the game's cast bar" tick box (Custom Options) undoes it.
+M.HIDE_GAME_CASTBAR_CODE = [[
+local region = aura_env.region
+local hide = aura_env.config.hideGameCastBar ~= false
+region.faHideGameBar = hide
+region.faHooked = region.faHooked or {}
+for _, name in ipairs({ "PlayerCastingBarFrame", "GamepadPlayerCastingBarFrame", "CastingBarFrame" }) do
+  local bar = _G[name]
+  if bar and bar.SetAndUpdateShowCastbar then
+    if not region.faHooked[name] then
+      region.faHooked[name] = true
+      hooksecurefunc(bar, "SetAndUpdateShowCastbar", function(self, show)
+        if show and region.faHideGameBar then self:SetAndUpdateShowCastbar(false) end
+      end)
+    end
+    if hide then
+      bar:SetAndUpdateShowCastbar(false)
+      region.faDidHide = true
+    elseif region.faDidHide then
+      bar:SetAndUpdateShowCastbar(true)
+    end
+  end
+end
+if not hide then region.faDidHide = nil end
 ]]
 
 function M.ClickCode(macro, castID, buffIDs)
@@ -477,6 +509,12 @@ local function castBar(id, parent, width, height, x, y)
 	time.text_text_format_p_time_precision = 1 -- 1.4 rather than 1
 	time.text_text_format_p_time_dynamic_threshold = 0
 	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), name, time }
+	d.actions.init = { do_custom = true, custom = M.HIDE_GAME_CASTBAR_CODE }
+	d.authorOptions = {
+		{ type = "toggle", key = "hideGameCastBar", name = "Hide the game's cast bar", default = true, width = 1,
+			useDesc = true, desc = "While this pack is loaded, the game's own cast bar stays hidden. Untick to bring it back." },
+	}
+	d.config = { hideGameCastBar = true }
 	return d
 end
 
