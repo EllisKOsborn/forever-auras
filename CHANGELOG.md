@@ -1,5 +1,9 @@
 # Changelog
 
+## Shadow Priest v1.2.1 (17 Nov 2026)
+- Shadow Weaving counts only **your** stacks: in Forever it boosts only the
+  priest who applied it (Blizzard's priest class deep dive).
+
 ## Shadow Priest v1.2.0 (17 Nov 2026)
 - Renamed to **Forever Auras | Shadow Priest**: a standalone pack.
 - **This version imports as a new group.** Delete the old one in `/fa`

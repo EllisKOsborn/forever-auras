@@ -227,13 +227,10 @@ describe("Shadow priest pack", function()
 			for _, d in ipairs(modern) do assert.equal("group", byId[d.parent].regionType, d.id) end
 		end)
 
-		it("look only at my own DoTs, but anyone's Shadow Weaving", function()
+		it("look only at my own debuffs on the target, Shadow Weaving included", function()
 			for _, d in ipairs(modern) do
 				local t = trig(d)
-				if t.unit == "target" then
-					local mine = t.nativeFilters.PLAYER == true
-					assert.equal(not d.id:match("Shadow Weaving$"), mine, d.id)
-				end
+				if t.unit == "target" then assert.is_true(t.nativeFilters.PLAYER == true, d.id) end
 			end
 		end)
 	end)

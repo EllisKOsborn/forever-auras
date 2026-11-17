@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.2.0"
+M.VERSION = "1.2.1"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -314,9 +314,11 @@ function M.Build()
 	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.swd.name, rotationID, L.big, x(4), 0, S.swd.id, "showAlways"))
 	rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. S.ve.name, rotationID, L.big, x(5), 0,
 		{ unit = "target", debuff = true, mine = true, spells = { S.ve.id }, showOn = "showAlways", known = S.ve.id }))
-	-- Any priest's Shadow Weaving counts, so not only mine.
+	-- Only my own Shadow Weaving counts: in Forever it boosts only the priest
+	-- who applied it (Blizzard's class deep dive; the debuff text reads
+	-- "Taking x% increased Shadow damage from the caster").
 	rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. S.weaving.name, rotationID, L.big, x(6), 0,
-		{ unit = "target", debuff = true, mine = false, spells = { S.weaving.id }, showOn = "showAlways",
+		{ unit = "target", debuff = true, mine = true, spells = { S.weaving.id }, showOn = "showAlways",
 			known = S.weavingTalent.id, stacks = true, timer = false }))
 
 	-- Cast bar right under the rotation row, as wide as the row.

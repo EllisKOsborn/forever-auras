@@ -86,8 +86,9 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   18 s); Vampiric Embrace can be kept up; Devouring Contagion talent spreads DP.
 - Not tracked: Mind Flay (no cooldown/aura worth it), Shadowfiend 401977
   (not in the guide), Power Infusion (Discipline).
-- Shadow Weaving debuff is 15258 (named "Shadow Weaving" in Forever); anyone's
-  counts. DoTs count only our own (`PLAYER` filter).
+- Shadow Weaving debuff is 15258 (named "Shadow Weaving" in Forever). In
+  Forever it helps only the casting priest (Blizzard deep dive), so it uses
+  the `PLAYER` filter like the DoTs (fixed in v1.2.1).
 
 ## Layout
 ```
