@@ -96,6 +96,7 @@ describe("Shadow priest pack", function()
 	it("uses only the spell IDs verified in Forever's data", function()
 		local verified = {}
 		for _, s in pairs(B.SPELLS) do verified[s.id] = true end
+		for _, r in ipairs(B.RACIALS) do verified[r.id] = true end
 		local used = 0
 		for _, d in ipairs(displays(pack)) do
 			if d.load.use_spellknown then
@@ -148,7 +149,7 @@ describe("Shadow priest pack", function()
 			end
 		end)
 
-		it("there are seven of them (4 on the target, 3 reminders)", function() assert.equal(7, #modern) end)
+		it("there are nine of them (4 on the target, 3 reminders, 2 procs)", function() assert.equal(9, #modern) end)
 
 		it("use a supported display type, unit, buff/debuff and filters", function()
 			for _, d in ipairs(modern) do
@@ -210,13 +211,77 @@ describe("Shadow priest pack", function()
 			end
 		end)
 
-		it("change only what the Missing look allows", function()
+		-- The sub-element a "sub.N.field" property points at, and the field.
+		local function element(d, property)
+			local index, field = property:match("^sub%.(%d+)%.(.+)$")
+			return index and d.subRegions[tonumber(index)], field
+		end
+
+		it("use only conditions ForeverAuras can draw in combat", function()
+			local kinds = {}
 			for _, d in ipairs(modern) do
 				for _, c in ipairs(d.conditions) do
-					assert.equal("faAuraActive", c.check.variable)
-					assert.equal(0, c.check.value) -- 0 = while missing
-					assert.is_nil(c.linked)
-					for _, change in ipairs(c.changes) do assert.truthy(missingLook[change.property], d.id) end
+					local v = c.check.variable
+					kinds[v] = true
+					assert.is_nil(c.linked) -- no Else If with Aura (Modern) checks
+					assert.equal(1, c.check.trigger)
+					if v == "faAuraActive" then
+						-- Missing look: the icon's own look, or its border colour.
+						assert.equal(0, c.check.value) -- 0 = while missing
+						for _, ch in ipairs(c.changes) do
+							local e, field = element(d, ch.property)
+							assert.truthy(missingLook[ch.property] or (e and e.type == "subborder" and field == "border_color"),
+								d.id .. " " .. ch.property)
+						end
+					elseif v == "faAuraRemaining" then
+						-- Remaining Time glow: must be "<" and turn a Glow element on.
+						assert.equal("<", c.check.op)
+						assert.is_true(tonumber(c.check.value) > 0)
+						for _, ch in ipairs(c.changes) do
+							local e, field = element(d, ch.property)
+							assert.equal("subglow", e.type)
+							assert.equal("glow", field)
+							assert.is_true(ch.value)
+						end
+					elseif v == "faAuraApplications" then
+						-- Stack count: may only change the stack text.
+						for _, ch in ipairs(c.changes) do
+							local e, field = element(d, ch.property)
+							assert.equal("subtext", e.type)
+							assert.equal("%s", e.text_text)
+							assert.equal("text_color", field)
+						end
+					else
+						error("unexpected condition " .. tostring(v) .. " on " .. d.id)
+					end
+				end
+			end
+			assert.truthy(kinds.faAuraActive and kinds.faAuraRemaining and kinds.faAuraApplications)
+		end)
+
+		it("glow on the DoTs when fewer than 3 seconds are left, and turn red when missing", function()
+			for _, name in ipairs({ "Shadow Word: Pain", "Devouring Plague", "Vampiric Embrace" }) do
+				local d
+				for _, x in ipairs(modern) do if x.id == B.PREFIX .. " | Rotation | " .. name then d = x end end
+				local found = {}
+				for _, c in ipairs(d.conditions) do
+					found[c.check.variable] = c
+				end
+				assert.equal(tostring(B.LAYOUT.expire), found.faAuraRemaining.check.value)
+				local red
+				for _, ch in ipairs(found.faAuraActive.changes) do
+					if ch.property:match("border_color$") then red = ch.value end
+				end
+				assert.same(B.COLOURS.missing, red)
+			end
+		end)
+
+		it("turn the Shadow Weaving number gold at 5 stacks", function()
+			for _, d in ipairs(modern) do
+				if d.id:match("Shadow Weaving$") then
+					assert.equal("faAuraApplications", d.conditions[2].check.variable)
+					assert.equal("5", d.conditions[2].check.value)
+					assert.equal(">=", d.conditions[2].check.op)
 				end
 			end
 		end)
@@ -247,7 +312,7 @@ describe("Shadow priest pack", function()
 					assert.is_false(t.use_showgcd) -- the global cooldown would flash every icon
 				end
 			end
-			assert.equal(6, n)
+			assert.equal(2 + 5 + #B.RACIALS, n) -- rotation, cooldown row, race spells
 		end)
 
 		it("grey out while cooling down when they are always shown", function()
@@ -258,6 +323,84 @@ describe("Shadow priest pack", function()
 					assert.equal("desaturate", d.conditions[1].changes[1].property)
 				end
 			end
+		end)
+
+		it("glow purple when ready, but only in combat", function()
+			local n = 0
+			for _, d in ipairs(pack.c) do
+				local t = trig(d)
+				if t and t.type == "spell" and t.genericShowOn == "showAlways" then
+					n = n + 1
+					local c = d.conditions[2]
+					assert.equal("AND", c.check.variable)
+					assert.same({ trigger = 1, variable = "onCooldown", value = 0 }, c.check.checks[1])
+					assert.same({ trigger = -1, variable = "incombat", value = 1 }, c.check.checks[2])
+					local index = tonumber(c.changes[1].property:match("^sub%.(%d+)%.glow$"))
+					assert.equal("subglow", d.subRegions[index].type)
+					assert.is_false(d.subRegions[index].glow) -- off unless the condition holds
+					assert.same(B.COLOURS.ready, d.subRegions[index].glowColor)
+				end
+			end
+			assert.equal(2, n) -- Mind Blast, Shadow Word: Death
+		end)
+
+		it("include your race's priest spells, each only when known", function()
+			local byName = {}
+			for _, d in ipairs(pack.c) do byName[d.id] = d end
+			assert.equal(9, #B.RACIALS)
+			for _, r in ipairs(B.RACIALS) do
+				local d = byName[B.PREFIX .. " | Cooldowns | " .. r.name]
+				assert.truthy(d, r.name)
+				assert.equal(r.id, d.load.spellknown)
+				assert.equal("showOnCooldown", trig(d).genericShowOn)
+			end
+			assert.truthy(byName[B.PREFIX .. " | Cooldowns | Vampiric Embrace"])
+		end)
+	end)
+
+	it("gives every icon a thin border (black, orange on reminders)", function()
+		for _, d in ipairs(pack.c) do
+			if d.regionType == "icon" then
+				local b
+				for _, e in ipairs(d.subRegions) do if e.type == "subborder" then b = e end end
+				assert.truthy(b, d.id)
+				assert.equal(1, b.border_size)
+				if d.parent == B.PREFIX .. " | Reminders" then
+					assert.same(B.COLOURS.reminder, b.border_color)
+				else
+					assert.same(B.COLOURS.border, b.border_color)
+				end
+			end
+		end
+	end)
+
+	describe("procs", function()
+		local byName
+		setup(function()
+			byName = {}
+			for _, d in ipairs(pack.c) do byName[d.id] = d end
+		end)
+
+		it("show Spirit Tap and Inner Focus only while up, glowing gold", function()
+			for _, name in ipairs({ "Spirit Tap", "Inner Focus" }) do
+				local d = byName[B.PREFIX .. " | Procs | " .. name]
+				local t = trig(d)
+				assert.equal("player", t.unit)
+				assert.equal("HELPFUL", t.debuffType)
+				assert.equal("showOnActive", t.secretShowOn)
+				local g
+				for _, e in ipairs(d.subRegions) do if e.type == "subglow" then g = e end end
+				assert.is_true(g.glow)
+			end
+			assert.same({ 15271 }, trig(byName[B.PREFIX .. " | Procs | Spirit Tap"]).auraRankSpellIDs)
+			assert.equal(15270, byName[B.PREFIX .. " | Procs | Spirit Tap"].load.spellknown) -- the talent
+		end)
+
+		it("sit left of the rotation row without touching it", function()
+			local procs, rot = byName[B.PREFIX .. " | Procs"], byName[B.PREFIX .. " | Rotation"]
+			local first = byName[rot.controlledChildren[1]]
+			local tap = byName[procs.controlledChildren[1]]
+			assert.is_true(procs.xOffset + tap.width / 2 < first.xOffset - first.width / 2)
 		end)
 	end)
 
@@ -315,9 +458,54 @@ describe("Shadow priest pack", function()
 			assert.equal(0, bar.xOffset)
 			local rowBottom = rot.yOffset - first.height / 2
 			assert.is_true(bar.yOffset + bar.height / 2 < rowBottom, "overlaps the rotation row")
+			local mana = byId[B.PREFIX .. " | Mana bar"]
+			assert.is_true(bar.yOffset - bar.height / 2 > mana.yOffset + mana.height / 2, "overlaps the mana bar")
 			local cds = byId[B.PREFIX .. " | Cooldowns"]
 			local cdTop = cds.yOffset + byId[cds.controlledChildren[1]].height / 2
-			assert.is_true(bar.yOffset - bar.height / 2 > cdTop, "overlaps the cooldown row")
+			assert.is_true(mana.yOffset - mana.height / 2 > cdTop, "mana bar overlaps the cooldown row")
+		end)
+
+		it("has two tick lines at a third and two thirds, only while channelling", function()
+			for i = 1, 2 do
+				local tick = byId[B.PREFIX .. " | Cast bar tick " .. i]
+				assert.equal("texture", tick.regionType)
+				local t = trig(tick)
+				assert.equal("Cast", t.event)
+				assert.is_true(t.use_castType)
+				assert.equal("channel", t.castType)
+				assert.is_nil(t.use_spellNames) -- the name can be secret in combat
+				local left = bar.xOffset - bar.width / 2
+				assert.is_true(math.abs(tick.xOffset - (left + bar.width * i / 3)) < 0.001)
+				assert.equal(bar.yOffset, tick.yOffset)
+				assert.equal(bar.height, tick.height)
+				assert.is_true(tick.frameStrata > bar.frameStrata) -- drawn over the bar
+			end
+		end)
+	end)
+
+	describe("mana bar", function()
+		local mana
+		setup(function()
+			for _, d in ipairs(pack.c) do if d.id == B.PREFIX .. " | Mana bar" then mana = d end end
+		end)
+
+		it("is a bar with ForeverAuras' Power trigger for your mana", function()
+			assert.equal("aurabar", mana.regionType)
+			local t = trig(mana)
+			assert.equal("Power", t.event)
+			assert.equal("player", t.unit)
+			assert.is_true(t.use_powertype)
+			assert.equal(0, t.powertype) -- mana
+			assert.is_nil(mana.load.use_spellknown)
+		end)
+
+		it("shows the percentage as a whole number (a format that copes with hidden values)", function()
+			local pct
+			for _, e in ipairs(mana.subRegions) do if e.type == "subtext" then pct = e end end
+			assert.equal("%percentpower%%", pct.text_text)
+			assert.equal("Number", pct.text_text_format_percentpower_format)
+			assert.equal(0, pct.text_text_format_percentpower_decimal_precision)
+			assert.equal("floor", pct.text_text_format_percentpower_round_type)
 		end)
 	end)
 

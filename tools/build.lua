@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.2.1"
+M.VERSION = "1.3.0"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -50,6 +50,27 @@ M.SPELLS = {
 	innerFire = { id = 588, name = "Inner Fire" },
 	fort = { id = 1243, name = "Power Word: Fortitude" },
 	prayerFort = { id = 21562, name = "Prayer of Fortitude" },
+	-- Procs (player buffs).
+	spiritTap = { id = 15271, name = "Spirit Tap" },            -- the buff (15 s); the talent is 15270
+	spiritTapTalent = { id = 15270, name = "Spirit Tap" },
+	-- Inner Focus's buff has the spell's own ID (14751), until the next spell.
+}
+
+-- Priest spells each race gets in Forever, with a cooldown (Blizzard's
+-- priest class deep dive; race masks and cooldowns checked in
+-- SkillLineAbility / SpellCooldowns). Spells without a cooldown (Touch of
+-- Weakness, Hex of Weakness, Shadowguard) are left out. Each icon only loads
+-- for a priest who knows the spell, so only your race's show.
+M.RACIALS = {
+	{ id = 13896, name = "Feedback", race = "Human" },             -- 3 min
+	{ id = 1277370, name = "Divine Grace", race = "Human" },       -- 10 min
+	{ id = 13908, name = "Desperate Prayer", race = "Dwarf" },     -- 10 min
+	{ id = 1277331, name = "Chastise", race = "Dwarf" },           -- 2 min
+	{ id = 10797, name = "Starshards", race = "Night Elf" },       -- 30 s
+	{ id = 2651, name = "Elune's Grace", race = "Night Elf" },     -- 5 min
+	{ id = 1277455, name = "Confounding Flash", race = "Gnome" },  -- 2 min
+	{ id = 1277462, name = "Contingency Plan", race = "Gnome" },   -- 10 min
+	{ id = 1277324, name = "Dark Sacrifice", race = "Undead" },    -- 10 min
 }
 
 -- Sizes and places (pixels, relative to the screen centre).
@@ -58,9 +79,27 @@ M.LAYOUT = {
 	big = 44, step = 48,      -- rotation row
 	small = 34,               -- cooldown row
 	reminder = 36,
+	proc = 44, procSmall = 36, -- procs, left of the rotation row
 	cast = 16,                -- cast bar height (as wide as the rotation row)
+	mana = 8,                 -- mana bar height
 	gap = 6,                  -- between rows
+	expire = 3,               -- seconds left when a DoT starts to glow
 }
+
+-- Colours (r, g, b, a).
+M.COLOURS = {
+	border = { 0, 0, 0, 1 },
+	missing = { 0.85, 0.2, 0.15, 1 },     -- missing DoT: red border
+	reminder = { 0.95, 0.55, 0.15, 1 },   -- missing buff: orange border
+	expiring = { 1, 0.82, 0.35, 1 },      -- DoT running out: gold glow
+	ready = { 0.72, 0.52, 1, 1 },         -- Mind Blast / SW: Death ready: purple glow
+	proc = { 1, 0.82, 0.35, 1 },          -- proc up: gold glow
+	stackFull = { 1, 0.82, 0.35, 1 },     -- 5 Shadow Weaving stacks: gold number
+	cast = { 0.58, 0.40, 0.90, 1 },
+	mana = { 0.25, 0.52, 1, 1 },
+	tick = { 1, 1, 1, 0.75 },
+}
+M.WEAVING_MAX = 5
 
 -- uid: 11 characters like ForeverAuras' own, but fixed per display name.
 local ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()"
@@ -171,12 +210,41 @@ local function text(fmt, point, size, x, y, visible)
 	}
 end
 
+-- A thin border round icons and bars (black unless a colour is given).
+local function border(c, parentType)
+	local b = { type = "subborder", border_visible = true, border_edge = "Square Full White",
+		border_color = c or M.COLOURS.border, border_offset = 0, border_size = 1 }
+	if parentType == "aurabar" then b.anchor_area = "bar" end
+	return b
+end
+
+-- A pixel glow, off unless a condition turns it on (or `on`).
+local function glow(c, on)
+	return { type = "subglow", glow = on == true, glowType = "Pixel", useGlowColor = true, glowColor = c,
+		glowLines = 8, glowFrequency = 0.25, glowDuration = 1, glowLength = 10, glowThickness = 2, glowScale = 1,
+		glowBorder = false, glowXOffset = 0, glowYOffset = 0 }
+end
+
+-- Adds sub-elements in order and returns each one's index ("sub.N.…").
+local function elements(d, list)
+	d.subRegions = {}
+	local at = {}
+	for _, e in ipairs(list) do
+		if e[2] then
+			d.subRegions[#d.subRegions + 1] = e[2]
+			at[e[1]] = #d.subRegions
+		end
+	end
+	return at
+end
+
 local function icon(id, parent, size, x, y)
 	local d = base(id, parent, "icon")
 	d.width, d.height = size, size
 	d.xOffset, d.yOffset = x or 0, y or 0
 	d.icon, d.iconSource = true, -1
-	d.color, d.desaturate, d.zoom, d.keepAspectRatio = color(1, 1, 1, 1), false, 0.18, false
+	-- Slight zoom crops the icon's own frame; the thin black border replaces it.
+	d.color, d.desaturate, d.zoom, d.keepAspectRatio = color(1, 1, 1, 1), false, 0.08, false
 	d.cooldown, d.cooldownSwipe, d.cooldownEdge = true, true, false
 	d.useCooldownModRate = true
 	d.progressSource = { -1, "" }
@@ -206,20 +274,39 @@ local function auraIcon(id, parent, size, x, y, o)
 		},
 		activeTriggerMode = 1, disjunctive = "all", secretFallback = "none",
 	}
-	d.subRegions = { { type = "subbackground" } }
-	if o.timer ~= false then
-		d.subRegions[#d.subRegions + 1] = text("%p", "CENTER", math.floor(size * 0.36), 0, 0)
-	end
-	if o.stacks then
-		d.subRegions[#d.subRegions + 1] = text("%s", "BOTTOMRIGHT", math.floor(size * 0.4), -2, 2)
-	end
+	local C = M.COLOURS
+	local at = elements(d, {
+		{ "bg", { type = "subbackground" } },
+		{ "border", border(o.borderColour) },
+		{ "glow", (o.expire or o.glowAlways) and glow(o.glowAlways and C.proc or C.expiring, o.glowAlways) },
+		{ "timer", o.timer ~= false and text("%p", "CENTER", math.floor(size * 0.42), 0, 0) },
+		{ "stacks", o.stacks and text("%s", "BOTTOMRIGHT", math.floor(size * 0.42), -2, 2) },
+	})
+	d.conditions = {}
 	if o.showOn == "showAlways" then
-		-- Missing: grey and faded, so the gap in the rotation stands out.
-		d.conditions = {
-			{
-				check = { trigger = 1, variable = "faAuraActive", value = 0 },
-				changes = { { property = "desaturate", value = true }, { property = "alpha", value = 0.45 } },
+		-- Missing: grey, faded and a red border, so the gap in the rotation stands out.
+		d.conditions[#d.conditions + 1] = {
+			check = { trigger = 1, variable = "faAuraActive", value = 0 },
+			changes = {
+				{ property = "desaturate", value = true },
+				{ property = "alpha", value = 0.5 },
+				{ property = "sub." .. at.border .. ".border_color", value = C.missing },
 			},
+		}
+	end
+	if o.expire then
+		-- Running out: the game lights the glow when fewer than `expire`
+		-- seconds are left (ForeverAuras' native Remaining Time glow).
+		d.conditions[#d.conditions + 1] = {
+			check = { trigger = 1, variable = "faAuraRemaining", op = "<", value = tostring(o.expire) },
+			changes = { { property = "sub." .. at.glow .. ".glow", value = true } },
+		}
+	end
+	if o.stackFull then
+		-- Full stacks: the stack number turns gold.
+		d.conditions[#d.conditions + 1] = {
+			check = { trigger = 1, variable = "faAuraApplications", op = ">=", value = tostring(o.stackFull) },
+			changes = { { property = "sub." .. at.stacks .. ".text_color", value = C.stackFull } },
 		}
 	end
 	return d
@@ -246,12 +333,26 @@ local function cooldownIcon(id, parent, size, x, y, spell, showOn)
 		},
 		activeTriggerMode = 1, disjunctive = "all",
 	}
-	d.subRegions = { { type = "subbackground" } }
-	if showOn == "showAlways" then
+	local always = showOn == "showAlways"
+	local at = elements(d, {
+		{ "bg", { type = "subbackground" } },
+		{ "border", border() },
+		{ "glow", always and glow(M.COLOURS.ready) },
+	})
+	if always then
 		d.conditions = {
 			{
 				check = { trigger = 1, variable = "onCooldown", value = 1 },
 				changes = { { property = "desaturate", value = true } },
+			},
+			{
+				-- Ready, and you're in a fight: purple glow. (Not out of
+				-- combat, or it would glow all the time.)
+				check = { variable = "AND", checks = {
+					{ trigger = 1, variable = "onCooldown", value = 0 },
+					{ trigger = -1, variable = "incombat", value = 1 },
+				} },
+				changes = { { property = "sub." .. at.glow .. ".glow", value = true } },
 			},
 		}
 	end
@@ -288,16 +389,69 @@ local function castBar(id, parent, width, height, x, y)
 	local time = text("%p", "INNER_RIGHT", 10, -4, 0)
 	time.text_text_format_p_time_precision = 1 -- 1.4 rather than 1
 	time.text_text_format_p_time_dynamic_threshold = 0
-	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, name, time }
+	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), name, time }
+	return d
+end
+
+-- Mana bar: ForeverAuras' Power trigger (mana = power type 0). When Forever
+-- hides the numbers in combat, ForeverAuras asks the game for the
+-- percentage (UnitPowerPercent) and the game fills the bar.
+local function manaBar(id, parent, width, height, x, y)
+	local d = base(id, parent, "aurabar")
+	d.width, d.height = width, height
+	d.xOffset, d.yOffset = x, y
+	d.load = load()
+	d.orientation, d.inverse = "HORIZONTAL", false
+	d.texture, d.textureSource = "Blizzard", "LSM"
+	d.barColor, d.barColor2 = color(unpack(M.COLOURS.mana)), color(1, 1, 1, 1)
+	d.backgroundColor = color(0.04, 0.03, 0.07, 0.85)
+	d.enableGradient, d.gradientOrientation = false, "HORIZONTAL"
+	d.icon, d.iconSource, d.icon_side, d.icon_color = false, -1, "LEFT", color(1, 1, 1, 1)
+	d.desaturate, d.zoom, d.spark = false, 0, false
+	d.progressSource = { -1, "" }
+	d.adjustedMin, d.adjustedMax = "", ""
+	d.triggers = {
+		{ trigger = { type = "unit", event = "Power", unit = "player", use_unit = true,
+			use_powertype = true, powertype = 0 }, untrigger = {} },
+		activeTriggerMode = 1, disjunctive = "all",
+	}
+	local pct = text("%percentpower%%", "INNER_RIGHT", 8, -3, 0)
+	pct.text_text_format_percentpower_format = "Number"
+	pct.text_text_format_percentpower_decimal_precision = 0
+	pct.text_text_format_percentpower_round_type = "floor"
+	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), pct }
+	return d
+end
+
+-- A thin line over the cast bar, shown only while channelling (Mind Flay
+-- ticks). It is its own display because ForeverAuras hides tick marks inside
+-- a bar while the game keeps the cast's timing secret (SubRegionTypes/Tick.lua).
+-- Only "is it a channel" is checked: the spell's name can be secret in combat.
+local function tickLine(id, parent, height, x, y)
+	local d = base(id, parent, "texture")
+	d.width, d.height = 2, height
+	d.xOffset, d.yOffset = x, y
+	d.load = load()
+	d.frameStrata = 5 -- above the cast bar
+	d.texture = "Interface\\Buttons\\WHITE8X8"
+	d.color = color(unpack(M.COLOURS.tick))
+	d.desaturate, d.blendMode, d.textureWrapMode = false, "BLEND", "CLAMPTOBLACKADDITIVE"
+	d.rotation, d.rotate, d.mirror = 0, false, false
+	d.triggers = {
+		{ trigger = { type = "unit", event = "Cast", unit = "player", use_unit = true, spellNames = {},
+			use_castType = true, castType = "channel" }, untrigger = {} },
+		activeTriggerMode = 1, disjunctive = "all",
+	}
 	return d
 end
 
 function M.Build()
 	local S, L, P = M.SPELLS, M.LAYOUT, M.PREFIX
 	local rotationID, cooldownID, reminderID = P .. " | Rotation", P .. " | Cooldowns", P .. " | Reminders"
-	local castID = P .. " | Cast bar"
+	local procID, castID, manaID = P .. " | Procs", P .. " | Cast bar", P .. " | Mana bar"
 	local children = {}
 	local function add(d) children[#children + 1] = d return d.id end
+	local rowWidth = 6 * L.step - (L.step - L.big) -- the rotation row, edge to edge
 
 	-- Rotation row, in the guide's priority order: keep both DoTs up, Mind
 	-- Blast and Shadow Word: Death on cooldown, keep Vampiric Embrace up;
@@ -306,55 +460,80 @@ function M.Build()
 	add(rotation)
 	local function x(i) return (i - 3.5) * L.step end
 	local rot = rotation.controlledChildren
-	rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. S.swp.name, rotationID, L.big, x(1), 0,
-		{ unit = "target", debuff = true, mine = true, spells = { S.swp.id }, showOn = "showAlways", known = S.swp.id }))
-	rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. S.dp.name, rotationID, L.big, x(2), 0,
-		{ unit = "target", debuff = true, mine = true, spells = { S.dp.id }, showOn = "showAlways", known = S.dp.id }))
+	local function dot(spell, i)
+		rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. spell.name, rotationID, L.big, x(i), 0,
+			{ unit = "target", debuff = true, mine = true, spells = { spell.id }, showOn = "showAlways",
+				known = spell.id, expire = L.expire }))
+	end
+	dot(S.swp, 1)
+	dot(S.dp, 2)
 	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.mb.name, rotationID, L.big, x(3), 0, S.mb.id, "showAlways"))
 	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.swd.name, rotationID, L.big, x(4), 0, S.swd.id, "showAlways"))
-	rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. S.ve.name, rotationID, L.big, x(5), 0,
-		{ unit = "target", debuff = true, mine = true, spells = { S.ve.id }, showOn = "showAlways", known = S.ve.id }))
+	dot(S.ve, 5)
 	-- Only my own Shadow Weaving counts: in Forever it boosts only the priest
 	-- who applied it (Blizzard's class deep dive; the debuff text reads
 	-- "Taking x% increased Shadow damage from the caster").
 	rot[#rot + 1] = add(auraIcon(rotationID .. " | " .. S.weaving.name, rotationID, L.big, x(6), 0,
 		{ unit = "target", debuff = true, mine = true, spells = { S.weaving.id }, showOn = "showAlways",
-			known = S.weavingTalent.id, stacks = true, timer = false }))
+			known = S.weavingTalent.id, stacks = true, timer = false, stackFull = M.WEAVING_MAX }))
 
-	-- Cast bar right under the rotation row, as wide as the row.
+	-- Procs, left of the rotation row, only while up (with a gold glow).
+	local procs = group(procID, P, -(rowWidth / 2 + L.gap + 4 + L.proc / 2), 0, {})
+	add(procs)
+	procs.controlledChildren[#procs.controlledChildren + 1] = add(auraIcon(procID .. " | " .. S.spiritTap.name, procID,
+		L.proc, 0, 0, { unit = "player", spells = { S.spiritTap.id }, showOn = "showOnActive",
+			known = S.spiritTapTalent.id, glowAlways = true }))
+	procs.controlledChildren[#procs.controlledChildren + 1] = add(auraIcon(procID .. " | " .. S.focus.name, procID,
+		L.procSmall, 0, -(L.proc / 2 + L.gap + L.procSmall / 2), { unit = "player", spells = { S.focus.id },
+			showOn = "showOnActive", known = S.focus.id, glowAlways = true, timer = false }))
+
+	-- Cast bar right under the rotation row, as wide as the row, with two
+	-- lines at a third and two thirds while channelling (Mind Flay: 3 s,
+	-- one tick a second in Forever's data).
 	local castY = -(L.big / 2 + L.gap + L.cast / 2)
-	add(castBar(castID, P, 6 * L.step - (L.step - L.big), L.cast, 0, castY))
+	add(castBar(castID, P, rowWidth, L.cast, 0, castY))
+	local tickIDs = {}
+	for i = 1, 2 do
+		tickIDs[i] = add(tickLine(P .. " | Cast bar tick " .. i, P, L.cast, -rowWidth / 2 + rowWidth * i / 3, castY))
+	end
 
-	-- Cooldown row under the cast bar: only while cooling down, so it is
-	-- empty when everything is ready.
-	local cds = row(cooldownID, P, 0, castY - (L.cast / 2 + L.gap + L.small / 2), {})
+	-- Mana bar, thin, right under the cast bar.
+	local manaY = castY - (L.cast / 2 + 2 + L.mana / 2)
+	add(manaBar(manaID, P, rowWidth, L.mana, 0, manaY))
+
+	-- Cooldown row under the bars: only while cooling down, so it is empty
+	-- when everything is ready. Your race's priest spells join it.
+	local cds = row(cooldownID, P, 0, manaY - (L.mana / 2 + L.gap + L.small / 2), {})
 	add(cds)
-	for _, key in ipairs({ "silence", "scream", "fade", "focus" }) do
-		local s = S[key]
+	local cdSpells = { S.silence, S.scream, S.fade, S.focus, S.ve }
+	for _, r in ipairs(M.RACIALS) do cdSpells[#cdSpells + 1] = r end
+	for _, s in ipairs(cdSpells) do
 		cds.controlledChildren[#cds.controlledChildren + 1] =
 			add(cooldownIcon(cooldownID .. " | " .. s.name, cooldownID, L.small, 0, 0, s.id, "showOnCooldown"))
 	end
 
-	-- Reminders above the rotation row: only while the buff is missing.
+	-- Reminders above the rotation row: only while the buff is missing, with
+	-- an orange border.
 	local rem = group(reminderID, P, 0, L.big / 2 + 10 + L.reminder / 2, {})
 	add(rem)
 	local remStep = L.reminder + 6
-	rem.controlledChildren[#rem.controlledChildren + 1] = add(auraIcon(reminderID .. " | " .. S.shadowform.name .. " missing",
-		reminderID, L.reminder, -remStep, 0,
-		{ unit = "player", spells = { S.shadowform.id }, showOn = "showOnMissing", known = S.shadowform.id, timer = false }))
-	rem.controlledChildren[#rem.controlledChildren + 1] = add(auraIcon(reminderID .. " | " .. S.innerFire.name .. " missing",
-		reminderID, L.reminder, 0, 0,
-		{ unit = "player", spells = { S.innerFire.id }, showOn = "showOnMissing", known = S.innerFire.id, timer = false }))
+	local function reminder(name, spells, known, xx)
+		rem.controlledChildren[#rem.controlledChildren + 1] = add(auraIcon(reminderID .. " | " .. name .. " missing",
+			reminderID, L.reminder, xx, 0, { unit = "player", spells = spells, showOn = "showOnMissing", known = known,
+				timer = false, borderColour = M.COLOURS.reminder }))
+	end
+	reminder(S.shadowform.name, { S.shadowform.id }, S.shadowform.id, -remStep)
+	reminder(S.innerFire.name, { S.innerFire.id }, S.innerFire.id, 0)
 	-- Either Fortitude counts (yours or another priest's, single or Prayer).
-	rem.controlledChildren[#rem.controlledChildren + 1] = add(auraIcon(reminderID .. " | Fortitude missing",
-		reminderID, L.reminder, remStep, 0,
-		{ unit = "player", spells = { S.fort.id, S.prayerFort.id }, showOn = "showOnMissing", known = S.fort.id, timer = false }))
+	reminder("Fortitude", { S.fort.id, S.prayerFort.id }, S.fort.id, remStep)
 
-	-- The root holds the three parts; it is placed below the character.
-	local root = group(P, nil, 0, L.rootY, { rotationID, castID, cooldownID, reminderID })
+	-- The root holds the parts; it is placed below the character.
+	local parts = { procID, rotationID, castID, tickIDs[1], tickIDs[2], manaID, cooldownID, reminderID }
+	local root = group(P, nil, 0, L.rootY, parts)
 	root.desc = "Forever Auras shadow priest pack " .. M.VERSION .. ". Rotation (Shadow Word: Pain, Devouring Plague, "
-		.. "Mind Blast, Shadow Word: Death, Vampiric Embrace, Shadow Weaving), cast bar, cooldowns and missing-buff "
-		.. "reminders. Priests only; spells you don't know yet stay hidden."
+		.. "Mind Blast, Shadow Word: Death, Vampiric Embrace, Shadow Weaving), procs, cast bar with Mind Flay ticks, "
+		.. "mana bar, cooldowns (with your race's priest spells) and missing-buff reminders. Priests only; spells you "
+		.. "don't know yet stay hidden."
 	root.groupIcon = "Interface\\Icons\\Spell_Shadow_Shadowform"
 
 	-- Children are listed group first, then that group's displays (the order
@@ -435,7 +614,7 @@ local function main(args)
 		for _, d in ipairs(t.c) do byId[d.id] = d end
 		local rows = {}
 		for _, d in ipairs(t.c) do
-			if d.regionType == "icon" or d.regionType == "aurabar" then
+			if d.regionType == "icon" or d.regionType == "aurabar" or d.regionType == "texture" then
 				local x, y, p = d.xOffset, d.yOffset, byId[d.parent]
 				local dynamic = p.regionType == "dynamicgroup"
 				local rowName = p == t.d and d.id:match("| ([^|]+)$") or d.parent:match("| ([^|]+)$")

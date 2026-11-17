@@ -1,5 +1,21 @@
 # Changelog
 
+## Shadow Priest v1.3.0 (17 Nov 2026)
+Bigger update, from research into Forever's shadow priest. Updates in place
+(choose **Update**). Not tested in game yet.
+- **Procs** left of the rotation: Spirit Tap and Inner Focus, only while up,
+  with a gold glow.
+- **Coloured feedback:** DoTs glow gold in their last 3 seconds and get a red
+  border while missing; Mind Blast and Shadow Word: Death glow purple when
+  ready during a fight; the Shadow Weaving number turns gold at 5 stacks.
+- **Mind Flay ticks:** two lines on the cast bar while channelling.
+- **Mana bar** with the percentage, under the cast bar.
+- **Cooldown row** adds Vampiric Embrace and your race's priest spells
+  (Feedback, Divine Grace, Desperate Prayer, Chastise, Starshards, Elune's
+  Grace, Confounding Flash, Contingency Plan, Dark Sacrifice; only yours show).
+- **Cleaner icons:** thin black borders (orange on reminders), less zoom,
+  bigger timer numbers.
+
 ## Shadow Priest v1.2.1 (17 Nov 2026)
 - Shadow Weaving counts only **your** stacks: in Forever it boosts only the
   priest who applied it (Blizzard's priest class deep dive).

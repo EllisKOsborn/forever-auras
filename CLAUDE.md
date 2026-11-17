@@ -16,12 +16,16 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026, v1.1.0)
+## Status (17 Nov 2026, v1.3.0)
 - **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
   "works fine it seems" (no item-by-item report yet).
-- **Shadow Priest v1.1.0** (`packs/ShadowPriest.txt`, 18 displays): adds a
-  **cast bar** (owner's request), not tested in game. In-game checklist:
-  README "Testing in game".
+- **Shadow Priest v1.1.0**: cast bar (owner's request). v1.2.0 renamed to
+  "Forever Auras | Shadow Priest" (no guild). v1.2.1: own Shadow Weaving only.
+- **Shadow Priest v1.3.0** (`packs/ShadowPriest.txt`, 34 displays), owner's
+  picks after research (17 Nov): procs, race + VE cooldowns, mana bar,
+  coloured feedback, Mind Flay ticks, cleaner icons. Not asked for: food /
+  weapon oil reminders. Nothing since v1.0.0 is tested in game. In-game
+  checklist: README "Testing in game".
 - `tests/fa-check.lua` (runs FA's real `Display.Validate`) was written but
   **not run**: running downloaded third-party code was blocked in the cloud
   session. Ask the owner before running it, or before adding it to CI.
@@ -69,6 +73,20 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   uses `UnitCastingDuration`/`UnitChannelDuration` and the game drives the
   bar (Prototypes.lua `["Cast"]`). Same setup as Forever Aura HUD's Core cast
   bar. The game's own cast bar is not hidden (would need custom code).
+- Looks on Aura (Modern) icons (SecretAuraConditions.lua): `subborder`
+  `border_color` may change with Aura Active = false; a `subglow` may be
+  turned on by `faAuraRemaining` with op `"<"` and a value > 0 (the game
+  draws it: Display.LateGlowSpec); `faAuraApplications` may only change the
+  `%s` text (`text_color`). Proc glows: a `subglow` with `glow = true`.
+- Tick marks inside a bar are hidden while the bar's values are secret
+  (SubRegionTypes/Tick.lua), so Mind Flay ticks are two `texture` displays
+  (2 px, strata HIGH) with a Cast trigger `use_castType`/`castType =
+  "channel"` (the spell name can be secret; cast type is not).
+- Mana bar: `event = "Power"`, `use_powertype = true`, `powertype = 0`;
+  `%percentpower` with format Number, precision 0, round "floor" (the floor
+  formatter handles secret numbers). `%%` prints a literal %.
+- Ready glow on legacy cooldown icons: condition `AND` of `onCooldown = 0`
+  (trigger 1) and global `incombat = 1` (trigger -1).
 - Spell cooldowns: `type = "spell"`, event "Cooldown Progress (Spell)";
   native swipe and the game's countdown numbers work in combat; condition
   `onCooldown`.
@@ -86,6 +104,16 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   18 s); Vampiric Embrace can be kept up; Devouring Contagion talent spreads DP.
 - Not tracked: Mind Flay (no cooldown/aura worth it), Shadowfiend 401977
   (not in the guide), Power Infusion (Discipline).
+- v1.3.0 (Blizzard deep dive + data): Vampiric Embrace 30 s debuff, 30 s
+  cooldown (data; the beta article said 1 min). Mind Flay 3 s, tick every
+  1 s (SpellEffect period 1000, duration 3000). Spirit Tap buff 15271 (15 s,
+  talent 15270). Race priest spells with cooldowns: `M.RACIALS` (race masks
+  Human 1, Dwarf 4, Night Elf 8, Undead 16, Gnome 64, Troll 128); Touch of
+  Weakness, Hex of Weakness and Shadowguard have no cooldown (could become
+  missing-buff reminders: Touch of Weakness 2652, Shadowguard 18137).
+  Forever-only talents (Improved Mind Flay 1225139, Devouring Contagion
+  1309950, Early Demise 1310076) are in SpellName but not in Talent.csv.
+  Shadowfiend 401977 is in the data but no source mentions it: left out.
 - Shadow Weaving debuff is 15258 (named "Shadow Weaving" in Forever). In
   Forever it helps only the casting priest (Blizzard deep dive), so it uses
   the `PLAYER` filter like the DoTs (fixed in v1.2.1).
