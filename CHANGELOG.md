@@ -1,5 +1,11 @@
 # Changelog
 
+## Shadow Priest v1.3.1 (17 Nov 2026)
+- Mind Blast and Shadow Word: Death now hide while you have no target, like
+  the rest of the rotation row.
+- The mana bar also shows your mana, shortened by the game (4,300 shows as
+  4.3K), next to the percentage. It's a little taller to fit.
+
 ## Shadow Priest v1.3.0 (17 Nov 2026)
 Bigger update, from research into Forever's shadow priest. Updates in place
 (choose **Update**). Not tested in game yet.

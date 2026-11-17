@@ -48,7 +48,7 @@ const tiles = items.map((i) => {
   if (i.name.startsWith("Cast bar tick")) return `<div class="tick" style="${pos}"></div>`;
   const s = ROW[i.row] || ROW.Rotation;
   if (i.row === "Cast bar") return `<div class="t bar" style="${pos}"><span>Mind Flay</span><span>1.4</span></div>`;
-  if (i.row === "Mana bar") return `<div class="t mana" style="${pos}"><span></span><span>64%</span></div>`;
+  if (i.row === "Mana bar") return `<div class="t mana" style="${pos}"><span>4.3K</span><span>64%</span></div>`;
   const st = STATE[i.row + "|" + i.name] || "";
   const extra = i.name === "Shadow Weaving" ? `<i>5</i>` : "";
   return `<div class="t ${st}" style="${pos}background:${s.bg};border-color:${s.border};` +
@@ -70,7 +70,7 @@ body{margin:0;background:#101014;font-family:Arial,Helvetica,sans-serif}
 align-items:center;justify-content:center;text-align:center;line-height:1.05;padding:1px;overflow:visible}
 .t.bar,.t.mana{justify-content:space-between;padding:0 4px;font-size:10px}
 .t.bar{background:linear-gradient(90deg,#8e66e6 0 62%,#1a1426 62%)}
-.t.mana{background:linear-gradient(90deg,#3f84ff 0 64%,#101830 64%);font-size:7px}
+.t.mana{background:linear-gradient(90deg,#3f84ff 0 64%,#101830 64%);font-size:8px}
 .t.missing{background:#333 !important;color:#888;border:1px solid #d9332a !important;box-shadow:0 0 0 1px #d9332a}
 .t.expiring{box-shadow:0 0 0 2px #ffd15a,0 0 8px 2px rgba(255,209,90,.6)}
 .t.ready{box-shadow:0 0 0 2px #b885ff,0 0 8px 2px rgba(184,133,255,.6)}

@@ -325,6 +325,26 @@ describe("Shadow priest pack", function()
 			end
 		end)
 
+		it("Mind Blast and Shadow Word: Death show only with a target, like the DoTs", function()
+			local n = 0
+			for _, d in ipairs(pack.c) do
+				if d.parent == B.PREFIX .. " | Rotation" and trig(d).type == "spell" then
+					n = n + 1
+					assert.equal("all", d.triggers.disjunctive)
+					assert.equal(1, d.triggers.activeTriggerMode) -- the cooldown still drives the icon
+					local t2 = d.triggers[2].trigger
+					assert.equal("Unit Characteristics", t2.event)
+					assert.equal("target", t2.unit)
+					assert.is_nil(d.triggers[3])
+				end
+			end
+			assert.equal(2, n)
+			-- the cooldown row needs no target
+			for _, d in ipairs(pack.c) do
+				if d.parent == B.PREFIX .. " | Cooldowns" then assert.is_nil(d.triggers[2], d.id) end
+			end
+		end)
+
 		it("glow purple when ready, but only in combat", function()
 			local n = 0
 			for _, d in ipairs(pack.c) do
@@ -499,10 +519,20 @@ describe("Shadow priest pack", function()
 			assert.is_nil(mana.load.use_spellknown)
 		end)
 
-		it("shows the percentage as a whole number (a format that copes with hidden values)", function()
+		it("shows your mana shortened (4.3K) on the left", function()
+			local amount
+			for _, e in ipairs(mana.subRegions) do if e.type == "subtext" and e.text_text == "%p" then amount = e end end
+			assert.equal("INNER_LEFT", amount.anchor_point)
+			assert.equal("BigNumber", amount.text_text_format_p_format)
+			assert.equal("AbbreviateNumbers", amount.text_text_format_p_big_number_format)
+		end)
+
+		it("shows the percentage as a whole number on the right (a format that copes with hidden values)", function()
 			local pct
-			for _, e in ipairs(mana.subRegions) do if e.type == "subtext" then pct = e end end
-			assert.equal("%percentpower%%", pct.text_text)
+			for _, e in ipairs(mana.subRegions) do
+				if e.type == "subtext" and e.text_text == "%percentpower%%" then pct = e end
+			end
+			assert.equal("INNER_RIGHT", pct.anchor_point)
 			assert.equal("Number", pct.text_text_format_percentpower_format)
 			assert.equal(0, pct.text_text_format_percentpower_decimal_precision)
 			assert.equal("floor", pct.text_text_format_percentpower_round_type)

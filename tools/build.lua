@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.3.0"
+M.VERSION = "1.3.1"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -81,7 +81,7 @@ M.LAYOUT = {
 	reminder = 36,
 	proc = 44, procSmall = 36, -- procs, left of the rotation row
 	cast = 16,                -- cast bar height (as wide as the rotation row)
-	mana = 8,                 -- mana bar height
+	mana = 12,                -- mana bar height (room for the numbers)
 	gap = 6,                  -- between rows
 	expire = 3,               -- seconds left when a DoT starts to glow
 }
@@ -314,7 +314,7 @@ end
 
 -- Spell cooldown icon. showOn: "showAlways" (greyed out while cooling down)
 -- or "showOnCooldown" (only while it is cooling down).
-local function cooldownIcon(id, parent, size, x, y, spell, showOn)
+local function cooldownIcon(id, parent, size, x, y, spell, showOn, needsTarget)
 	local d = icon(id, parent, size, x, y)
 	d.inverse = false
 	d.cooldownTextDisabled = false -- the game's own countdown numbers
@@ -333,6 +333,12 @@ local function cooldownIcon(id, parent, size, x, y, spell, showOn)
 		},
 		activeTriggerMode = 1, disjunctive = "all",
 	}
+	if needsTarget then
+		-- Only while you have a target, like the DoT icons beside it: a second
+		-- trigger that is active while "target" exists ("all" triggers needed).
+		d.triggers[2] = { trigger = { type = "unit", event = "Unit Characteristics", unit = "target", use_unit = true },
+			untrigger = {} }
+	end
 	local always = showOn == "showAlways"
 	local at = elements(d, {
 		{ "bg", { type = "subbackground" } },
@@ -415,11 +421,18 @@ local function manaBar(id, parent, width, height, x, y)
 			use_powertype = true, powertype = 0 }, untrigger = {} },
 		activeTriggerMode = 1, disjunctive = "all",
 	}
-	local pct = text("%percentpower%%", "INNER_RIGHT", 8, -3, 0)
+	-- Left: your mana, shortened by the game (4,300 -> "4.3K"); Blizzard's
+	-- AbbreviateNumbers accepts the hidden numbers of combat
+	-- (SecretArguments = "AllowedWhenTainted" in its API documentation).
+	local amount = text("%p", "INNER_LEFT", 9, 3, 0)
+	amount.text_text_format_p_format = "BigNumber"
+	amount.text_text_format_p_big_number_format = "AbbreviateNumbers"
+	-- Right: the percentage.
+	local pct = text("%percentpower%%", "INNER_RIGHT", 9, -3, 0)
 	pct.text_text_format_percentpower_format = "Number"
 	pct.text_text_format_percentpower_decimal_precision = 0
 	pct.text_text_format_percentpower_round_type = "floor"
-	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), pct }
+	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), amount, pct }
 	return d
 end
 
@@ -467,8 +480,9 @@ function M.Build()
 	end
 	dot(S.swp, 1)
 	dot(S.dp, 2)
-	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.mb.name, rotationID, L.big, x(3), 0, S.mb.id, "showAlways"))
-	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.swd.name, rotationID, L.big, x(4), 0, S.swd.id, "showAlways"))
+	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.mb.name, rotationID, L.big, x(3), 0, S.mb.id, "showAlways", true))
+	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.swd.name, rotationID, L.big, x(4), 0, S.swd.id, "showAlways",
+		true))
 	dot(S.ve, 5)
 	-- Only my own Shadow Weaving counts: in Forever it boosts only the priest
 	-- who applied it (Blizzard's class deep dive; the debuff text reads

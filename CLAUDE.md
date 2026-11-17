@@ -16,7 +16,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026, v1.3.0)
+## Status (17 Nov 2026, v1.3.1)
 - **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
   "works fine it seems" (no item-by-item report yet).
 - **Shadow Priest v1.1.0**: cast bar (owner's request). v1.2.0 renamed to
@@ -85,6 +85,15 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - Mana bar: `event = "Power"`, `use_powertype = true`, `powertype = 0`;
   `%percentpower` with format Number, precision 0, round "floor" (the floor
   formatter handles secret numbers). `%%` prints a literal %.
+- Only with a target (v1.3.1, owner: icons showing without a target looked
+  pointless): Mind Blast / SW:Death have a 2nd trigger `Unit Characteristics`
+  on `target` (active while it exists), `disjunctive = "all"`, activeTriggerMode
+  stays 1. The DoT icons already fade without a target (FA does that for
+  Aura (Modern) on optional units).
+- Mana amount: `%p` (the power value) with format `BigNumber` /
+  `AbbreviateNumbers` → "4.3K". Blizzard's API docs (forever branch,
+  LocalizationDocumentation.lua) mark AbbreviateNumbers
+  `SecretArguments = "AllowedWhenTainted"`, so it takes combat's hidden numbers.
 - Ready glow on legacy cooldown icons: condition `AND` of `onCooldown = 0`
   (trigger 1) and global `incombat = 1` (trigger -1).
 - Spell cooldowns: `type = "spell"`, event "Cooldown Progress (Spell)";
