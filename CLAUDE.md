@@ -7,9 +7,7 @@ the status or a convention, update this file in the same commit.
 ForeverAuras import packs for **WoW Forever** (Blizzard's 2026 classic-era
 realm, client 1.60.1, level cap 60). ForeverAuras = the Forever port of
 WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
-1703325). Made for the guild **Short Royalty** (its addon lives in
-`EllisKOsborn/forever-shortroyalty`; this repo was split off from it on
-17 Nov 2026 and shares no code with it).
+1703325). A standalone project.
 
 ## The person you're working with
 - **Not a developer**, often on their **phone**. Plain language, short
@@ -43,8 +41,11 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   the README copy). Never hand-edit an import string.
 - Every change: `busted --lua=lua5.1`, `luacheck .`, `lua5.1 tools/build.lua --check`
   green; README and CHANGELOG updated; `node tools/layout.js` when positions change.
-- Keep display names (and so uids, `Build.Uid(name)`) stable: re-imports then
-  offer **Update** instead of a copy. Bump `M.VERSION` (semver) per release.
+- uids come from `M.UID_KEY` + the name after the prefix (`Build.UidKey`), so the
+  shown prefix can change; keep the rest of each name stable, or re-imports
+  make a copy instead of offering **Update**. v1.2.0 changed uids once (rename).
+- **Nothing in this repo refers to any guild** (owner, 17 Nov 2026): it is a
+  standalone public project. Bump `M.VERSION` (semver) per release.
 
 ## ForeverAuras facts (read from its 1.4.3 source, 15 Nov 2026 commit c421b5f)
 - Import string: `"!WA:2!" .. LibDeflate:EncodeForPrint(CompressDeflate(LibSerialize(t), {level = 9}))`,
@@ -93,7 +94,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 packs/      import strings (generated)
 tools/      build.lua (the pack, codec, --check, --layout), layout.js (docs/layout.png from --layout)
 tests/      pack_spec.lua (busted), fa-check.lua (optional, needs FA source)
-vendor/     LibStub, LibSerialize, LibDeflate (from forever-shortroyalty's Libs/)
+vendor/     LibStub, LibSerialize, LibDeflate (licences inside)
 docs/       layout.png
 ```
 

@@ -24,11 +24,14 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.1.0"
+M.VERSION = "1.2.0"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
-M.PREFIX = "Short Royalty | Shadow Priest"
+M.PREFIX = "Forever Auras | Shadow Priest"
+-- uids come from this key, not the shown name, so renaming the pack later
+-- still lets ForeverAuras offer "Update".
+M.UID_KEY = "ShadowPriest"
 
 -- Every spell the pack uses. `rank1` is what goes into the triggers.
 M.SPELLS = {
@@ -77,6 +80,12 @@ function M.Uid(id)
 	return table.concat(out)
 end
 
+-- The uid key of a display: its name with the shown prefix swapped for UID_KEY.
+function M.UidKey(id)
+	if id:sub(1, #M.PREFIX) == M.PREFIX then return M.UID_KEY .. id:sub(#M.PREFIX + 1) end
+	return id
+end
+
 local function color(r, g, b, a) return { r, g, b, a or 1 } end
 
 local function noAnimation()
@@ -98,9 +107,9 @@ end
 -- Fields every display carries (ForeverAuras' own defaults for them).
 local function base(id, parent, regionType)
 	return {
-		id = id, uid = M.Uid(id), parent = parent, regionType = regionType,
+		id = id, uid = M.Uid(M.UidKey(id)), parent = parent, regionType = regionType,
 		internalVersion = M.INTERNAL, tocversion = M.TOC, semver = M.VERSION, version = 1,
-		author = "Short Royalty",
+		author = "Forever Auras",
 		anchorFrameType = "SCREEN", anchorPoint = "CENTER", selfPoint = "CENTER",
 		xOffset = 0, yOffset = 0, alpha = 1, scale = 1, frameStrata = 1,
 		actions = { start = {}, init = {}, finish = {} },
@@ -341,7 +350,7 @@ function M.Build()
 
 	-- The root holds the three parts; it is placed below the character.
 	local root = group(P, nil, 0, L.rootY, { rotationID, castID, cooldownID, reminderID })
-	root.desc = "Short Royalty shadow priest pack " .. M.VERSION .. ". Rotation (Shadow Word: Pain, Devouring Plague, "
+	root.desc = "Forever Auras shadow priest pack " .. M.VERSION .. ". Rotation (Shadow Word: Pain, Devouring Plague, "
 		.. "Mind Blast, Shadow Word: Death, Vampiric Embrace, Shadow Weaving), cast bar, cooldowns and missing-buff "
 		.. "reminders. Priests only; spells you don't know yet stay hidden."
 	root.groupIcon = "Interface\\Icons\\Spell_Shadow_Shadowform"

@@ -78,6 +78,14 @@ describe("Shadow priest pack", function()
 		end
 	end)
 
+	it("carries only its own name and author", function()
+		for _, d in ipairs(displays(pack)) do
+			assert.equal(B.PREFIX, d.id:sub(1, #B.PREFIX))
+			assert.equal("Forever Auras", d.author)
+		end
+		assert.equal("Forever Auras | Shadow Priest", B.PREFIX)
+	end)
+
 	it("loads only for priests, every display (groups don't pass it on)", function()
 		for _, d in ipairs(displays(pack)) do
 			assert.is_true(d.load.use_class, d.id)
@@ -318,6 +326,9 @@ describe("Shadow priest pack", function()
 
 	it("gives the same uid to the same name every time (imports offer Update)", function()
 		assert.equal(B.Uid("x"), B.Uid("x"))
-		assert.are_not.equal(B.Uid("Short Royalty | Shadow Priest"), B.Uid("Short Royalty | Shadow Priest | Rotation"))
+		assert.are_not.equal(B.Uid(B.UidKey(B.PREFIX)), B.Uid(B.UidKey(B.PREFIX .. " | Rotation")))
+		-- independent of the shown name
+		assert.equal("ShadowPriest | Rotation", B.UidKey(B.PREFIX .. " | Rotation"))
+		assert.equal(B.Uid("ShadowPriest"), pack.d.uid)
 	end)
 end)

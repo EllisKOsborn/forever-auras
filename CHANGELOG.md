@@ -1,5 +1,11 @@
 # Changelog
 
+## Shadow Priest v1.2.0 (17 Nov 2026)
+- Renamed to **Forever Auras | Shadow Priest**: a standalone pack.
+- **This version imports as a new group.** Delete the old one in `/fa`
+  first (the group named after the old name), then import. Later versions
+  update in place again.
+
 ## Shadow Priest v1.1.0 (17 Nov 2026)
 - **Cast bar** under the rotation row, as wide as the row: spell name on the
   left, time left on the right, shown only while casting or channelling.
