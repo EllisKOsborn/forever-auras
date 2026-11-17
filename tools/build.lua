@@ -24,7 +24,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.3.1"
+M.VERSION = "1.4.0"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -54,6 +54,20 @@ M.SPELLS = {
 	spiritTap = { id = 15271, name = "Spirit Tap" },            -- the buff (15 s); the talent is 15270
 	spiritTapTalent = { id = 15270, name = "Spirit Tap" },
 	-- Inner Focus's buff has the spell's own ID (14751), until the next spell.
+	-- Night Elf: Elune's Light is the racial every Night Elf has (+10% crit,
+	-- 15 s, 3 min; SkillLine 126, race mask 8); Elune's Grace is the Night Elf
+	-- priest spell (15 s, 5 min). Their buffs carry the spells' own IDs.
+	eluneLight = { id = 1259799, name = "Elune's Light" },
+	eluneGrace = { id = 2651, name = "Elune's Grace" },
+	-- Power Word: Shield (30 s, 4 s cooldown) and Weakened Soul (6788, 15 s:
+	-- can't be shielded again).
+	shield = { id = 17, name = "Power Word: Shield" },
+	weakenedSoul = { id = 6788, name = "Weakened Soul" },
+	-- Buffs for the reminders (all 1 h or 10 min, cast on yourself).
+	divineSpirit = { id = 14752, name = "Divine Spirit" },        -- baseline at 30 in Forever
+	prayerSpirit = { id = 27681, name = "Prayer of Spirit" },
+	touchWeakness = { id = 2652, name = "Touch of Weakness" },    -- Undead priests
+	shadowguard = { id = 18137, name = "Shadowguard" },           -- Troll priests
 }
 
 -- Priest spells each race gets in Forever, with a cooldown (Blizzard's
@@ -71,6 +85,7 @@ M.RACIALS = {
 	{ id = 1277455, name = "Confounding Flash", race = "Gnome" },  -- 2 min
 	{ id = 1277462, name = "Contingency Plan", race = "Gnome" },   -- 10 min
 	{ id = 1277324, name = "Dark Sacrifice", race = "Undead" },    -- 10 min
+	{ id = 1259799, name = "Elune's Light", race = "Night Elf" },  -- 3 min (the Night Elf racial)
 }
 
 -- Sizes and places (pixels, relative to the screen centre).
@@ -84,6 +99,7 @@ M.LAYOUT = {
 	mana = 12,                -- mana bar height (room for the numbers)
 	gap = 6,                  -- between rows
 	expire = 3,               -- seconds left when a DoT starts to glow
+	execute = 20,             -- target health % below which SW: Death gets the execute frame
 }
 
 -- Colours (r, g, b, a).
@@ -98,7 +114,62 @@ M.COLOURS = {
 	cast = { 0.58, 0.40, 0.90, 1 },
 	mana = { 0.25, 0.52, 1, 1 },
 	tick = { 1, 1, 1, 0.75 },
+	execute = { 0.95, 0.12, 0.12, 1 },   -- SW: Death execute frame
 }
+
+-- Click to rebuff (custom Init code, run by ForeverAuras when the display
+-- loads). It puts the game's own secure spell button over the reminder; the
+-- display loads only out of combat, and ForeverAuras hides clickable
+-- displays in combat with the game's "[combat] hide" driver
+-- (RegionPrototype.lua). Out of combat, auras are readable, so the button is
+-- hidden while the buff is up (no recasting by clicking an empty spot).
+-- %s placeholders: the macro (with %%s for the spell name), the spell to
+-- cast, the buffs that count as present.
+M.CLICK_CODE = [[
+local region = aura_env.region
+local macro, castID, buffIDs = %q, %d, { %s }
+local function present()
+  for _, id in ipairs(buffIDs) do
+    local name = C_Spell.GetSpellName(id)
+    if name then
+      -- Out of combat only, so the result is readable. (Called directly: ForeverAuras
+      -- blocks protected calls in custom code.)
+      if C_UnitAuras.GetAuraDataBySpellName("player", name, "HELPFUL") then return true end
+    end
+  end
+  return false
+end
+local function update()
+  if InCombatLockdown() then return end
+  local button = region.faRebuff
+  if not button then
+    button = CreateFrame("Button", nil, region, "SecureActionButtonTemplate")
+    button:SetAllPoints(region)
+    button:RegisterForClicks("AnyUp", "AnyDown")
+    region.faRebuff = button
+  end
+  local spell = C_Spell.GetSpellName(castID)
+  if spell then
+    button:SetAttribute("type", "macro")
+    button:SetAttribute("macrotext", macro:format(spell))
+  end
+  button:SetShown(not present())
+end
+local watcher = region.faRebuffWatcher or CreateFrame("Frame")
+region.faRebuffWatcher = watcher
+watcher:UnregisterAllEvents()
+watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+watcher:RegisterUnitEvent("UNIT_AURA", "player")
+watcher:SetScript("OnEvent", update)
+update()
+]]
+
+function M.ClickCode(macro, castID, buffIDs)
+	local ids = {}
+	for i, id in ipairs(buffIDs) do ids[i] = tostring(id) end
+	return M.CLICK_CODE:format(macro, castID, table.concat(ids, ", "))
+end
 M.WEAVING_MAX = 5
 
 -- uid: 11 characters like ForeverAuras' own, but fixed per display name.
@@ -260,20 +331,28 @@ local function auraIcon(id, parent, size, x, y, o)
 	d.cooldownTextDisabled = true
 	d.blizzardAuraDisplay = { maxIcons = 1, sharedDisplay = true, actionSounds = false }
 	d.load = load(o.known)
+	-- o.combat: true = only in combat, false = only out of combat.
+	if o.combat ~= nil then d.load.use_combat = o.combat end
+	local trigger = {
+		type = "secretAura", event = "Health", auraTracking = "native",
+		unit = o.unit, debuffType = o.debuff and "HARMFUL" or "HELPFUL",
+		-- Without names (o.spells nil), every aura passes the other filters.
+		auraRankSpellIDs = o.spells or {}, secretUseRankSpellIDs = o.spells ~= nil,
+		secretUseSpellIDs = false, auraspellids = {}, useExactSpellId = false,
+		nativeFilters = o.mine and { PLAYER = true } or {},
+		secretShowOn = o.showOn,
+	}
+	if o.total then
+		-- Total Duration = n seconds (ForeverAuras' native gate).
+		trigger.secretUseTotal, trigger.secretTotalOperator, trigger.secretTotal = true, "=", tostring(o.total)
+	end
 	d.triggers = {
-		{
-			trigger = {
-				type = "secretAura", event = "Health", auraTracking = "native",
-				unit = o.unit, debuffType = o.debuff and "HARMFUL" or "HELPFUL",
-				auraRankSpellIDs = o.spells, secretUseRankSpellIDs = true,
-				secretUseSpellIDs = false, auraspellids = {}, useExactSpellId = false,
-				nativeFilters = o.mine and { PLAYER = true } or {},
-				secretShowOn = o.showOn,
-			},
-			untrigger = {},
-		},
+		{ trigger = trigger, untrigger = {} },
 		activeTriggerMode = 1, disjunctive = "all", secretFallback = "none",
 	}
+	if o.click then
+		d.actions.init = { do_custom = true, custom = M.ClickCode(o.click.macro, o.click.cast, o.spells) }
+	end
 	local C = M.COLOURS
 	local at = elements(d, {
 		{ "bg", { type = "subbackground" } },
@@ -458,6 +537,39 @@ local function tickLine(id, parent, height, x, y)
 	return d
 end
 
+-- Execute frame: a red square just larger than Shadow Word: Death's icon,
+-- drawn behind it (strata LOW), so it shows as a red frame. It is invisible
+-- (alpha 0) unless your target's health is below `percent`: ForeverAuras
+-- compares the hidden health percentage through the game's own curves
+-- (Conditions.lua, PowerCurve), which may change alpha but not glows.
+-- Only while Shadow Word: Death is ready (second trigger).
+local function executeFrame(id, parent, size, x, y, spell, percent)
+	local d = base(id, parent, "texture")
+	d.width, d.height = size + 6, size + 6
+	d.xOffset, d.yOffset = x, y
+	d.load = load(spell)
+	d.frameStrata = 3 -- LOW: behind the icon (which inherits MEDIUM)
+	d.alpha = 0
+	d.texture = "Interface\\Buttons\\WHITE8X8"
+	d.color = color(unpack(M.COLOURS.execute))
+	d.desaturate, d.blendMode, d.textureWrapMode = false, "BLEND", "CLAMPTOBLACKADDITIVE"
+	d.rotation, d.rotate, d.mirror = 0, false, false
+	d.triggers = {
+		{ trigger = { type = "unit", event = "Health", unit = "target", use_unit = true }, untrigger = {} },
+		{ trigger = { type = "spell", event = "Cooldown Progress (Spell)", unit = "player",
+			spellName = spell, use_spellName = true, use_exact_spellName = false,
+			track = "cooldown", use_track = true, genericShowOn = "showOnReady", use_genericShowOn = true,
+			use_ignoreSpellKnown = false, use_ignoreoverride = false, use_showgcd = false, use_showgcdtext = false },
+			untrigger = {} },
+		activeTriggerMode = 1, disjunctive = "all",
+	}
+	d.conditions = {
+		{ check = { trigger = 1, variable = "percenthealth", op = "<", value = percent },
+			changes = { { property = "alpha", value = 1 } } },
+	}
+	return d
+end
+
 function M.Build()
 	local S, L, P = M.SPELLS, M.LAYOUT, M.PREFIX
 	local rotationID, cooldownID, reminderID = P .. " | Rotation", P .. " | Cooldowns", P .. " | Reminders"
@@ -483,6 +595,11 @@ function M.Build()
 	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.mb.name, rotationID, L.big, x(3), 0, S.mb.id, "showAlways", true))
 	rot[#rot + 1] = add(cooldownIcon(rotationID .. " | " .. S.swd.name, rotationID, L.big, x(4), 0, S.swd.id, "showAlways",
 		true))
+	-- Red frame round Shadow Word: Death below 20% target health (Early
+	-- Demise's threshold). A % is the only health the game lets addons use in
+	-- combat, so this marks an execute window, not a guaranteed kill.
+	rot[#rot + 1] = add(executeFrame(rotationID .. " | " .. S.swd.name .. " execute", rotationID, L.big, x(4), 0,
+		S.swd.id, L.execute))
 	dot(S.ve, 5)
 	-- Only my own Shadow Weaving counts: in Forever it boosts only the priest
 	-- who applied it (Blizzard's class deep dive; the debuff text reads
@@ -491,15 +608,35 @@ function M.Build()
 		{ unit = "target", debuff = true, mine = true, spells = { S.weaving.id }, showOn = "showAlways",
 			known = S.weavingTalent.id, stacks = true, timer = false, stackFull = M.WEAVING_MAX }))
 
-	-- Procs, left of the rotation row, only while up (with a gold glow).
-	local procs = group(procID, P, -(rowWidth / 2 + L.gap + 4 + L.proc / 2), 0, {})
+	-- Procs and short buffs, left of the rotation row in a 2 x 2 block, only
+	-- while up (with a gold glow). Elune's Light and Elune's Grace only load
+	-- for Night Elves (who know them).
+	local cell = L.procSmall + L.gap
+	local procs = group(procID, P, -(rowWidth / 2 + L.gap + 4 + L.procSmall / 2), 0, {})
 	add(procs)
-	procs.controlledChildren[#procs.controlledChildren + 1] = add(auraIcon(procID .. " | " .. S.spiritTap.name, procID,
-		L.proc, 0, 0, { unit = "player", spells = { S.spiritTap.id }, showOn = "showOnActive",
-			known = S.spiritTapTalent.id, glowAlways = true }))
-	procs.controlledChildren[#procs.controlledChildren + 1] = add(auraIcon(procID .. " | " .. S.focus.name, procID,
-		L.procSmall, 0, -(L.proc / 2 + L.gap + L.procSmall / 2), { unit = "player", spells = { S.focus.id },
-			showOn = "showOnActive", known = S.focus.id, glowAlways = true, timer = false }))
+	local function proc(spell, known, px, py, timer)
+		procs.controlledChildren[#procs.controlledChildren + 1] = add(auraIcon(procID .. " | " .. spell.name, procID,
+			L.procSmall, px, py, { unit = "player", spells = { spell.id }, showOn = "showOnActive", known = known,
+				glowAlways = true, timer = timer }))
+	end
+	proc(S.spiritTap, S.spiritTapTalent.id, 0, 0)
+	proc(S.focus, S.focus.id, 0, -cell, false) -- lasts until your next spell: no timer
+	proc(S.eluneLight, S.eluneLight.id, -cell, 0)
+	proc(S.eluneGrace, S.eluneGrace.id, -cell, -cell)
+
+	-- Shield, right of the rotation row: Power Word: Shield on you (anyone's)
+	-- and, under it, Weakened Soul. Debuffs on you can't be matched by spell ID
+	-- in combat (ForeverAuras' rule), so Weakened Soul is "a debuff you cast
+	-- on yourself that lasts exactly 15 seconds". Another priest's Weakened
+	-- Soul is not shown.
+	local shieldID = P .. " | Shield"
+	local shield = group(shieldID, P, rowWidth / 2 + L.gap + 4 + L.procSmall / 2, 0, {})
+	add(shield)
+	shield.controlledChildren[#shield.controlledChildren + 1] = add(auraIcon(shieldID .. " | " .. S.shield.name, shieldID,
+		L.procSmall, 0, 0, { unit = "player", spells = { S.shield.id }, showOn = "showOnActive", known = S.shield.id }))
+	shield.controlledChildren[#shield.controlledChildren + 1] = add(auraIcon(shieldID .. " | " .. S.weakenedSoul.name,
+		shieldID, L.procSmall, 0, -cell, { unit = "player", debuff = true, mine = true, showOn = "showOnActive",
+			total = 15, known = S.shield.id, borderColour = M.COLOURS.missing }))
 
 	-- Cast bar right under the rotation row, as wide as the row, with two
 	-- lines at a third and two thirds while channelling (Mind Flay: 3 s,
@@ -531,23 +668,41 @@ function M.Build()
 	local rem = group(reminderID, P, 0, L.big / 2 + 10 + L.reminder / 2, {})
 	add(rem)
 	local remStep = L.reminder + 6
-	local function reminder(name, spells, known, xx)
-		rem.controlledChildren[#rem.controlledChildren + 1] = add(auraIcon(reminderID .. " | " .. name .. " missing",
-			reminderID, L.reminder, xx, 0, { unit = "player", spells = spells, showOn = "showOnMissing", known = known,
-				timer = false, borderColour = M.COLOURS.reminder }))
+	local function slot(i) return (i - 3) * remStep end
+	-- Out of combat each reminder is clickable: it casts the buff on you.
+	-- macro: "%s" is the spell's name in your game's language.
+	local function reminder(name, spells, known, xx, macro, inCombat)
+		local o = { unit = "player", spells = spells, showOn = "showOnMissing", known = known,
+			timer = false, borderColour = M.COLOURS.reminder }
+		if inCombat then
+			o.combat = true
+		else
+			o.combat, o.click = false, { macro = macro, cast = spells[1] }
+		end
+		rem.controlledChildren[#rem.controlledChildren + 1] = add(auraIcon(reminderID .. " | " .. name .. " missing"
+			.. (inCombat and " (in combat)" or ""), reminderID, L.reminder, xx, 0, o))
 	end
-	reminder(S.shadowform.name, { S.shadowform.id }, S.shadowform.id, -remStep)
-	reminder(S.innerFire.name, { S.innerFire.id }, S.innerFire.id, 0)
-	-- Either Fortitude counts (yours or another priest's, single or Prayer).
-	reminder("Fortitude", { S.fort.id, S.prayerFort.id }, S.fort.id, remStep)
+	-- "!" makes /cast never switch you out of Shadowform.
+	reminder(S.shadowform.name, { S.shadowform.id }, S.shadowform.id, slot(1), "/cast !%s")
+	-- In combat the clickable reminders hide; Shadowform still warns, unclickable.
+	reminder(S.shadowform.name, { S.shadowform.id }, S.shadowform.id, slot(1), nil, true)
+	reminder(S.innerFire.name, { S.innerFire.id }, S.innerFire.id, slot(2), "/cast %s")
+	-- Either Fortitude / Spirit counts (yours or another priest's, single or Prayer).
+	reminder("Fortitude", { S.fort.id, S.prayerFort.id }, S.fort.id, slot(3), "/cast [@player] %s")
+	reminder(S.divineSpirit.name, { S.divineSpirit.id, S.prayerSpirit.id }, S.divineSpirit.id, slot(4),
+		"/cast [@player] %s")
+	-- Race self-buffs share a spot (no priest has both).
+	reminder(S.touchWeakness.name, { S.touchWeakness.id }, S.touchWeakness.id, slot(5), "/cast %s")
+	reminder(S.shadowguard.name, { S.shadowguard.id }, S.shadowguard.id, slot(5), "/cast %s")
 
 	-- The root holds the parts; it is placed below the character.
-	local parts = { procID, rotationID, castID, tickIDs[1], tickIDs[2], manaID, cooldownID, reminderID }
+	local parts = { procID, rotationID, shieldID, castID, tickIDs[1], tickIDs[2], manaID, cooldownID, reminderID }
 	local root = group(P, nil, 0, L.rootY, parts)
 	root.desc = "Forever Auras shadow priest pack " .. M.VERSION .. ". Rotation (Shadow Word: Pain, Devouring Plague, "
-		.. "Mind Blast, Shadow Word: Death, Vampiric Embrace, Shadow Weaving), procs, cast bar with Mind Flay ticks, "
-		.. "mana bar, cooldowns (with your race's priest spells) and missing-buff reminders. Priests only; spells you "
-		.. "don't know yet stay hidden."
+		.. "Mind Blast, Shadow Word: Death with an execute frame, Vampiric Embrace, Shadow Weaving), procs, Power Word: "
+		.. "Shield and Weakened Soul, cast bar with Mind Flay ticks, mana bar, cooldowns (with your race's spells) and "
+		.. "missing-buff reminders you can click to rebuff out of combat. Priests only; spells you don't know yet stay "
+		.. "hidden."
 	root.groupIcon = "Interface\\Icons\\Spell_Shadow_Shadowform"
 
 	-- Children are listed group first, then that group's displays (the order

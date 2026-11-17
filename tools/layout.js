@@ -10,8 +10,11 @@ const ROOT = path.join(__dirname, "..");
 // The cooldown row only ever shows what is cooling down, and race spells only
 // for your race: draw a typical moment (a Night Elf priest mid-fight).
 const COOLDOWN_SAMPLE = ["Silence", "Fade", "Vampiric Embrace", "Starshards"];
+// Displays that share a spot (only one ever shows) are drawn once.
+const SAME_SPOT = ["Shadowform missing (in combat)", "Shadowguard missing"];
 const items = JSON.parse(execFileSync("lua5.1", ["tools/build.lua", "--layout"], { cwd: ROOT, encoding: "utf8" }))
-  .filter((i) => i.row !== "Cooldowns" || COOLDOWN_SAMPLE.includes(i.name));
+  .filter((i) => i.row !== "Cooldowns" || COOLDOWN_SAMPLE.includes(i.name))
+  .filter((i) => !SAME_SPOT.includes(i.name));
 
 // Dynamic rows (cooldowns) close up: lay them out side by side as the game does.
 const rows = {};
@@ -29,23 +32,27 @@ const ROW = {
   "Mana bar": { bg: "#1f3a6b", border: "#000", label: "Mana" },
   Cooldowns: { bg: "#1f2a3d", border: "#000", label: "Cooldowns, only while cooling down (+ your race's spells)" },
   Procs: { bg: "#1f3d30", border: "#000", label: "" },
+  Shield: { bg: "#3d3520", border: "#000", label: "" },
 };
 // Example states, so the picture shows what each colour means.
 const STATE = {
   "Rotation|Devouring Plague": "missing", "Rotation|Vampiric Embrace": "expiring", "Rotation|Mind Blast": "ready",
   "Rotation|Shadow Weaving": "full", "Procs|Spirit Tap": "proc", "Procs|Inner Focus": "proc",
+  "Procs|Elune's Light": "proc", "Shield|Weakened Soul": "soul",
 };
 const short = (n) => n.replace(" missing", "").replace("Shadow Word: ", "SW: ").replace("Power Word: ", "PW: ")
-  .replace("Shadowform", "Shadow&shy;form");
+  .replace("Shadowform", "Shadow&shy;form").replace("Touch of Weakness", "Race buff")
+  .replace("Weakened Soul", "Weak&shy;ened Soul").replace("Divine Spirit", "Divine Spirit");
 
 const ROOT_Y = -200; // the pack's place below screen centre
 const top = Math.max(...items.map((i) => i.y + i.h / 2)), bottom = Math.min(...items.map((i) => i.y - i.h / 2));
-const PAD = 24, W = 640, H = Math.ceil(top - bottom) + PAD * 2 + 40, CX = W / 2 - 40;
+const PAD = 24, W = 660, H = Math.ceil(top - bottom) + PAD * 2 + 66, CX = W / 2 - 30;
 const toTop = (y) => PAD + (top - y); // screen y (up) to page y (down)
 
 const tiles = items.map((i) => {
   const pos = `left:${CX + i.x - i.w / 2}px;top:${toTop(i.y + i.h / 2)}px;width:${i.w}px;height:${i.h}px;`;
   if (i.name.startsWith("Cast bar tick")) return `<div class="tick" style="${pos}"></div>`;
+  if (i.name.endsWith(" execute")) return `<div class="exec" style="${pos}"></div>`;
   const s = ROW[i.row] || ROW.Rotation;
   if (i.row === "Cast bar") return `<div class="t bar" style="${pos}"><span>Mind Flay</span><span>1.4</span></div>`;
   if (i.row === "Mana bar") return `<div class="t mana" style="${pos}"><span>4.3K</span><span>64%</span></div>`;
@@ -60,8 +67,9 @@ const labels = Object.entries(ROW).map(([name, s]) => {
   if (!ys.length || !s.label) return "";
   return `<div class="l" style="top:${toTop(ys[0]) - 6}px">${s.label}</div>`;
 }).join("");
-const legend = `<div class="lg">Grey + red border: DoT missing · Gold glow: running out / proc up · ` +
-  `Purple glow: ready (in combat) · Gold 5: full Shadow Weaving</div>`;
+const legend = `<div class="lg">Grey + red border: DoT missing · Gold glow: running out / buff up · ` +
+  `Purple glow: ready (in combat)<br>Red frame: SW: Death with target under 20% · Gold 5: full Shadow Weaving<br>` +
+  `Left: procs + Elune's buffs · Right: your shield + Weakened Soul · Reminders: click to rebuff (out of combat)</div>`;
 
 const html = `<!doctype html><meta charset="utf-8"><style>
 body{margin:0;background:#101014;font-family:Arial,Helvetica,sans-serif}
@@ -78,8 +86,11 @@ align-items:center;justify-content:center;text-align:center;line-height:1.05;pad
 .t.full i{color:#ffd15a}
 .t i{position:absolute;right:2px;bottom:0;font-style:normal;font-weight:bold;font-size:13px}
 .tick{position:absolute;background:rgba(255,255,255,.75);z-index:2}
+.exec{position:absolute;background:#f21f1f;z-index:0}
+.t{z-index:1}
+.t.soul{border:1px solid #d9332a !important;box-shadow:0 0 0 1px #d9332a}
 .l{position:absolute;right:8px;color:#999;font-size:9px;line-height:1.15;width:118px;text-align:left}
-.lg{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:#aaa;font-size:9.5px}
+.lg{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:#aaa;font-size:9px;line-height:1.4}
 .n{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#777;font-size:10px}
 </style><div class="s">${tiles}${labels}${legend}
 <div class="n">Layout sketch from the pack's positions, not a game screenshot. The pack sits ${-ROOT_Y} px below screen centre.</div></div>`;

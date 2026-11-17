@@ -1,5 +1,17 @@
 # Changelog
 
+## Shadow Priest v1.4.0 (17 Nov 2026)
+Updates in place (choose **Update**). Not tested in game yet.
+- **Elune's Light** (Night Elf racial, +10% crit) and **Elune's Grace**: shown
+  on the left while active, and in the cooldown row while cooling down.
+- **Power Word: Shield and Weakened Soul**, right of the rotation row.
+- **Execute frame:** a red frame round Shadow Word: Death when it's ready and
+  your target is below 20% health.
+- **Clickable reminders:** out of combat, click a missing buff to cast it on
+  yourself. In combat they hide, except a Shadowform warning.
+- New reminders: **Divine Spirit** and your race's self-buff (Touch of
+  Weakness, Shadowguard).
+
 ## Shadow Priest v1.3.1 (17 Nov 2026)
 - Mind Blast and Shadow Word: Death now hide while you have no target, like
   the rest of the rotation row.

@@ -16,7 +16,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026, v1.3.1)
+## Status (17 Nov 2026, v1.4.0)
 - **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
   "works fine it seems" (no item-by-item report yet).
 - **Shadow Priest v1.1.0**: cast bar (owner's request). v1.2.0 renamed to
@@ -26,6 +26,11 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   coloured feedback, Mind Flay ticks, cleaner icons. Not asked for: food /
   weapon oil reminders. Nothing since v1.0.0 is tested in game. In-game
   checklist: README "Testing in game".
+- **v1.4.0** (owner, 17 Nov): Elune's Light/Grace, PW:Shield + Weakened Soul,
+  SW:Death execute frame (owner chose the 20% marker after being told an
+  exact kill prediction isn't possible), clickable reminders out of combat
+  with an in-combat Shadowform warning, Divine Spirit + race self-buff
+  reminders. 45 displays.
 - `tests/fa-check.lua` (runs FA's real `Display.Validate`) was written but
   **not run**: running downloaded third-party code was blocked in the cloud
   session. Ask the owner before running it, or before adding it to CI.
@@ -96,6 +101,26 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   `SecretArguments = "AllowedWhenTainted"`, so it takes combat's hidden numbers.
 - Ready glow on legacy cooldown icons: condition `AND` of `onCooldown = 0`
   (trigger 1) and global `incombat = 1` (trigger -1).
+- **Custom code sandbox** (AuraEnvironment.lua): `pcall`, `xpcall`,
+  `loadstring`, `getfenv`/`setfenv`, `securecall`, `RunScript`, `debug`,
+  `SlashCmdList`, chat frames and FA's saved tables are **blocked** (they
+  silently do nothing). `_G` is the sandbox. `aura_env.region` is the display.
+  tests/pack_spec.lua fails if pack code names a blocked function.
+- **Clickable displays:** a `SecureActionButtonTemplate` child of the region
+  (made in Custom Init, out of combat). FA's supported pattern is load "Not in
+  combat" (`load.use_combat = false`): FA then adds a "[combat] hide" state
+  driver (RegionPrototype.lua ApplyCombatHideDriver). Modern regions stay shown
+  while the aura is present, so our code hides the button when the buff is up
+  (C_UnitAuras.GetAuraDataBySpellName, readable out of combat). FA shows a
+  "Secure frame detected" warning on them: expected.
+- **Health % on hidden values:** a condition on a Health trigger's
+  `percenthealth` (or Power's `percentpower`) that changes `alpha`/colour is
+  turned into a game curve (Conditions.lua PowerCurve), like Forever Aura HUD's
+  FX textures. Not glows. Absolute `health` needs the max health known
+  (remembered per unit token, so wrong after a target switch): don't use it.
+- **Debuffs on the player:** not matched by spell ID in combat. Use no names +
+  `nativeFilters.PLAYER` + Total Duration `=` (`secretUseTotal`,
+  `secretTotalOperator = "="`, `secretTotal = "15"`), Show On Aura(s) Found.
 - Spell cooldowns: `type = "spell"`, event "Cooldown Progress (Spell)";
   native swipe and the game's countdown numbers work in combat; condition
   `onCooldown`.
@@ -123,6 +148,12 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   Forever-only talents (Improved Mind Flay 1225139, Devouring Contagion
   1309950, Early Demise 1310076) are in SpellName but not in Talent.csv.
   Shadowfiend 401977 is in the data but no source mentions it: left out.
+- v1.4.0 data: Elune's Light 1259799 (Night Elf racial for every class,
+  SkillLine 126, 3 min, 15 s +10% crit); Elune's Grace 2651 (15 s, 5 min);
+  PW:Shield 17 (30 s, 4 s cd); Weakened Soul 6788 (15 s); Divine Spirit 14752 /
+  Prayer of Spirit 27681 (1 h, baseline at 30); Touch of Weakness 2652
+  (Undead), Shadowguard 18137 (Troll), both 10 min. SW:Death damage per rank
+  295/370/403/448 + 42.9% spell power, no random range.
 - Shadow Weaving debuff is 15258 (named "Shadow Weaving" in Forever). In
   Forever it helps only the casting priest (Blizzard deep dive), so it uses
   the `PLAYER` filter like the DoTs (fixed in v1.2.1).

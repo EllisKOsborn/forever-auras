@@ -149,7 +149,9 @@ describe("Shadow priest pack", function()
 			end
 		end)
 
-		it("there are nine of them (4 on the target, 3 reminders, 2 procs)", function() assert.equal(9, #modern) end)
+		it("there are 17 of them (4 on the target, 7 reminders, 4 procs, 2 shield)", function()
+			assert.equal(17, #modern)
+		end)
 
 		it("use a supported display type, unit, buff/debuff and filters", function()
 			for _, d in ipairs(modern) do
@@ -165,14 +167,24 @@ describe("Shadow priest pack", function()
 			end
 		end)
 
-		it("name at least one aura, as positive whole spell IDs", function()
+		it("name at least one aura as positive whole spell IDs, or filter by duration and caster", function()
 			for _, d in ipairs(modern) do
 				local t = trig(d)
-				assert.is_true(t.secretUseRankSpellIDs)
-				assert.is_true(#t.auraRankSpellIDs > 0, d.id)
-				for _, id in ipairs(t.auraRankSpellIDs) do
-					assert.equal("number", type(id))
-					assert.is_true(id > 0 and id == math.floor(id))
+				if t.secretUseRankSpellIDs then
+					assert.is_true(#t.auraRankSpellIDs > 0, d.id)
+					for _, id in ipairs(t.auraRankSpellIDs) do
+						assert.equal("number", type(id))
+						assert.is_true(id > 0 and id == math.floor(id))
+					end
+				else
+					-- Only Weakened Soul: no names (debuffs on you can't be matched by
+					-- spell ID in combat), so your own 15 s debuffs.
+					assert.truthy(d.id:match("Weakened Soul$"), d.id)
+					assert.is_true(t.secretUseTotal)
+					assert.equal("=", t.secretTotalOperator)
+					assert.equal("15", t.secretTotal)
+					assert.is_true(t.nativeFilters.PLAYER)
+					assert.equal("showOnActive", t.secretShowOn) -- Total Duration = needs Aura(s) Found
 				end
 			end
 		end)
@@ -367,7 +379,7 @@ describe("Shadow priest pack", function()
 		it("include your race's priest spells, each only when known", function()
 			local byName = {}
 			for _, d in ipairs(pack.c) do byName[d.id] = d end
-			assert.equal(9, #B.RACIALS)
+			assert.equal(10, #B.RACIALS) -- 9 priest race spells + Elune's Light
 			for _, r in ipairs(B.RACIALS) do
 				local d = byName[B.PREFIX .. " | Cooldowns | " .. r.name]
 				assert.truthy(d, r.name)
@@ -387,6 +399,8 @@ describe("Shadow priest pack", function()
 				assert.equal(1, b.border_size)
 				if d.parent == B.PREFIX .. " | Reminders" then
 					assert.same(B.COLOURS.reminder, b.border_color)
+				elseif d.id:match("Weakened Soul$") then
+					assert.same(B.COLOURS.missing, b.border_color)
 				else
 					assert.same(B.COLOURS.border, b.border_color)
 				end
@@ -432,9 +446,11 @@ describe("Shadow priest pack", function()
 		local lastX
 		for _, id in ipairs(row.controlledChildren) do
 			local d = byId[id]
+			if d.regionType == "icon" then
 			order[#order + 1] = id:match("| ([^|]+)$")
 			if lastX then assert.is_true(d.xOffset - lastX >= d.width) end
 			lastX = d.xOffset
+			end
 		end
 		assert.same({ "Shadow Word: Pain", "Devouring Plague", "Mind Blast", "Shadow Word: Death",
 			"Vampiric Embrace", "Shadow Weaving" }, order)
@@ -536,6 +552,213 @@ describe("Shadow priest pack", function()
 			assert.equal("Number", pct.text_text_format_percentpower_format)
 			assert.equal(0, pct.text_text_format_percentpower_decimal_precision)
 			assert.equal("floor", pct.text_text_format_percentpower_round_type)
+		end)
+	end)
+
+	describe("v1.4.0", function()
+		local byName
+		setup(function()
+			byName = {}
+			for _, d in ipairs(pack.c) do byName[d.id] = d end
+		end)
+		local function get(name) return assert(byName[B.PREFIX .. " | " .. name], name) end
+
+		it("shows Elune's Light and Elune's Grace while up, for Night Elves only", function()
+			for _, spell in ipairs({ B.SPELLS.eluneLight, B.SPELLS.eluneGrace }) do
+				local d = get("Procs | " .. spell.name)
+				assert.same({ spell.id }, trig(d).auraRankSpellIDs)
+				assert.equal(spell.id, d.load.spellknown)
+				assert.equal("showOnActive", trig(d).secretShowOn)
+			end
+			assert.equal(1259799, B.SPELLS.eluneLight.id)
+			assert.truthy(get("Cooldowns | Elune's Light"))
+			assert.truthy(get("Cooldowns | Elune's Grace"))
+		end)
+
+		it("shows Power Word: Shield on you, and Weakened Soul under it", function()
+			local shield = get("Shield | Power Word: Shield")
+			assert.equal("player", trig(shield).unit)
+			assert.equal("HELPFUL", trig(shield).debuffType)
+			assert.same({ 17 }, trig(shield).auraRankSpellIDs)
+			assert.same({}, trig(shield).nativeFilters) -- anyone's shield counts
+			local soul = get("Shield | Weakened Soul")
+			assert.equal("HARMFUL", trig(soul).debuffType)
+			assert.equal("player", trig(soul).unit)
+			assert.is_true(soul.yOffset < shield.yOffset)
+		end)
+
+		it("frames Shadow Word: Death in red below 20% target health, only when it's ready", function()
+			local swd = get("Rotation | Shadow Word: Death")
+			local ex = get("Rotation | Shadow Word: Death execute")
+			assert.equal("texture", ex.regionType)
+			assert.equal(swd.xOffset, ex.xOffset)
+			assert.equal(swd.yOffset, ex.yOffset)
+			assert.is_true(ex.width > swd.width)
+			assert.equal(0, ex.alpha) -- invisible unless the condition holds
+			assert.is_true(ex.frameStrata < 4 and ex.frameStrata > 1) -- below the icon (inherits MEDIUM)
+			local t1, t2 = ex.triggers[1].trigger, ex.triggers[2].trigger
+			assert.equal("Health", t1.event)
+			assert.equal("target", t1.unit)
+			assert.equal("showOnReady", t2.genericShowOn)
+			assert.equal(B.SPELLS.swd.id, t2.spellName)
+			assert.equal("all", ex.triggers.disjunctive)
+			-- A health-% condition on trigger 1 changing alpha: ForeverAuras turns
+			-- that into a game curve (works with hidden health).
+			local c = ex.conditions[1].check
+			assert.same({ trigger = 1, variable = "percenthealth", op = "<", value = 20 }, c)
+			assert.same({ { property = "alpha", value = 1 } }, ex.conditions[1].changes)
+		end)
+
+		it("has a reminder for each buff, the race buffs sharing a spot", function()
+			for _, name in ipairs({ "Shadowform", "Inner Fire", "Fortitude", "Divine Spirit", "Touch of Weakness",
+				"Shadowguard" }) do
+				local d = get("Reminders | " .. name .. " missing")
+				assert.equal("showOnMissing", trig(d).secretShowOn)
+				assert.is_false(d.load.use_combat) -- clickable: out of combat only
+				assert.is_true(d.actions.init.do_custom)
+			end
+			assert.equal(get("Reminders | Touch of Weakness missing").xOffset, get("Reminders | Shadowguard missing").xOffset)
+			assert.same({ 14752, 27681 }, trig(get("Reminders | Divine Spirit missing")).auraRankSpellIDs)
+		end)
+
+		it("keeps an unclickable Shadowform warning for combat, on the same spot", function()
+			local out, inside = get("Reminders | Shadowform missing"), get("Reminders | Shadowform missing (in combat)")
+			assert.is_true(inside.load.use_combat)
+			assert.is_nil(inside.actions.init.do_custom)
+			assert.equal(out.xOffset, inside.xOffset)
+		end)
+
+		it("uses only Custom Init on Aura (Modern) displays (ForeverAuras' rule)", function()
+			for _, d in ipairs(pack.c) do
+				for when, action in pairs(d.actions) do
+					if when ~= "init" then assert.is_nil(action.do_custom, d.id) end
+				end
+			end
+		end)
+
+		-- Names ForeverAuras 1.4.3 blocks in custom code (AuraEnvironment.lua
+		-- blockedFunctions / blockedTables): calling one does nothing there.
+		local BLOCKED = { "getfenv", "setfenv", "loadstring", "pcall", "xpcall", "securecall", "RunScript",
+			"EnumerateFrames", "SlashCmdList", "DEFAULT_CHAT_FRAME", "ChatFrame1", "debug", "ConsoleExec",
+			"GetButtonMetatable", "GetFrameMetatable", "ForeverAurasSaved", "WeakAurasSaved" }
+
+		it("custom code uses nothing ForeverAuras blocks", function()
+			for _, d in ipairs(pack.c) do
+				local code = d.actions.init and d.actions.init.custom
+				if code then
+					for _, name in ipairs(BLOCKED) do
+						assert.is_nil(code:find("%f[%w_]" .. name .. "%f[^%w_]"), d.id .. " uses " .. name)
+					end
+				end
+			end
+		end)
+
+		describe("click to rebuff (the Init code, run against a fake game)", function()
+			local function run(name, auras, inCombat)
+				local d = get("Reminders | " .. name .. " missing")
+				local code = d.actions.init.custom
+				local made, events = {}, {}
+				local region = {}
+				local function frame(kind, _, parent, template)
+					local f = { kind = kind, parent = parent, template = template, attr = {}, shown = true, events = {} }
+					function f.SetAllPoints(self, r) self.points = r end
+					function f.RegisterForClicks(self, ...) self.clicks = { ... } end
+					function f.SetAttribute(self, k, v) self.attr[k] = v end
+					function f.SetShown(self, v) self.shown = v end
+					function f.UnregisterAllEvents(self) self.events = {} end
+					function f.RegisterEvent(self, e) self.events[e] = true end
+					function f.RegisterUnitEvent(self, e, u) self.events[e] = u end
+					function f.SetScript(self, _, fn) self.onEvent = fn; events[#events + 1] = fn end
+					made[#made + 1] = f
+					return f
+				end
+				local names = { [15473] = "Shadowform", [588] = "Inner Fire", [1243] = "Power Word: Fortitude",
+					[21562] = "Prayer of Fortitude", [14752] = "Divine Spirit", [27681] = "Prayer of Spirit",
+					[2652] = "Touch of Weakness", [18137] = "Shadowguard" }
+				local env = setmetatable({
+					aura_env = { region = region },
+					CreateFrame = frame,
+					InCombatLockdown = function() return inCombat end,
+					C_Spell = { GetSpellName = function(id) return names[id] end },
+					C_UnitAuras = { GetAuraDataBySpellName = function(unit, n, filter)
+						assert.equal("player", unit)
+						assert.equal("HELPFUL", filter)
+						return auras[n] and { name = n } or nil
+					end },
+				}, { __index = _G })
+				for _, blockedName in ipairs(BLOCKED) do
+					rawset(env, blockedName, function() error(blockedName .. " is blocked by ForeverAuras") end)
+				end
+				local fn = assert(loadstring(code))
+				setfenv(fn, env)
+				fn()
+				return region, made, env
+			end
+
+			it("compiles and makes a secure macro button over the reminder", function()
+				local region = run("Inner Fire", {})
+				local b = region.faRebuff
+				assert.equal("SecureActionButtonTemplate", b.template)
+				assert.equal(region, b.parent)
+				assert.equal(region, b.points)
+				assert.equal("macro", b.attr.type)
+				assert.equal("/cast Inner Fire", b.attr.macrotext)
+				assert.is_true(b.shown)
+			end)
+
+			it("casts Fortitude and Divine Spirit on yourself, and never toggles Shadowform off", function()
+				assert.equal("/cast [@player] Power Word: Fortitude", run("Fortitude", {}).faRebuff.attr.macrotext)
+				assert.equal("/cast [@player] Divine Spirit", run("Divine Spirit", {}).faRebuff.attr.macrotext)
+				assert.equal("/cast !Shadowform", run("Shadowform", {}).faRebuff.attr.macrotext)
+				assert.equal("/cast Shadowguard", run("Shadowguard", {}).faRebuff.attr.macrotext)
+			end)
+
+			it("hides the button while the buff is up (Prayer counts too)", function()
+				assert.is_false(run("Inner Fire", { ["Inner Fire"] = true }).faRebuff.shown)
+				assert.is_false(run("Fortitude", { ["Prayer of Fortitude"] = true }).faRebuff.shown)
+				assert.is_false(run("Divine Spirit", { ["Prayer of Spirit"] = true }).faRebuff.shown)
+			end)
+
+			it("re-checks on aura changes and after combat", function()
+				local region = run("Inner Fire", {})
+				local w = region.faRebuffWatcher
+				assert.equal("player", w.events.UNIT_AURA)
+				assert.is_true(w.events.PLAYER_REGEN_ENABLED)
+				assert.is_true(w.events.PLAYER_ENTERING_WORLD)
+				assert.is_function(w.onEvent)
+			end)
+
+			it("touches nothing in combat (secure buttons can't change then)", function()
+				local region, made = run("Inner Fire", {}, true)
+				assert.is_nil(region.faRebuff)
+				assert.equal(1, #made) -- only the event watcher
+			end)
+
+			it("reuses its button and watcher when the display loads again", function()
+				local d = get("Reminders | Inner Fire missing")
+				local region = {}
+				local count = 0
+				local env = setmetatable({
+					aura_env = { region = region },
+					CreateFrame = function()
+						count = count + 1
+						local f = { attr = {} }
+						for _, m in ipairs({ "SetAllPoints", "RegisterForClicks", "SetShown", "UnregisterAllEvents",
+							"RegisterEvent", "RegisterUnitEvent", "SetScript" }) do f[m] = function() end end
+						function f.SetAttribute(self, k, v) self.attr[k] = v end
+						return f
+					end,
+					InCombatLockdown = function() return false end,
+					C_Spell = { GetSpellName = function() return "Inner Fire" end },
+					C_UnitAuras = { GetAuraDataBySpellName = function() return nil end },
+				}, { __index = _G })
+				for _ = 1, 3 do
+					local fn = assert(loadstring(d.actions.init.custom))
+					setfenv(fn, env)
+					fn()
+				end
+				assert.equal(2, count) -- one button, one watcher
+			end)
 		end)
 	end)
 
