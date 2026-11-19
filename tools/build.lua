@@ -4,8 +4,10 @@
 -- its import format, it copies no code from it.
 --
 -- Usage (from the repository root):
---   lua5.1 tools/build.lua           write packs/ShadowPriest.txt
---   lua5.1 tools/build.lua --check   fail if the file is out of date
+--   lua5.1 tools/build.lua           write every pack (packs/*.txt) and the README copies
+--   lua5.1 tools/build.lua --check   fail if any of them is out of date
+--   lua5.1 tools/build.lua --layout [ShadowPriest|HolyPriest]   positions, for tools/layout.js
+-- The holy priest pack is defined in tools/holy.lua and built with the same pieces.
 --
 -- Import format (ForeverAuras 1.4.3, Transmission.lua): "!WA:2!" followed by
 -- LibDeflate:EncodeForPrint(CompressDeflate(LibSerialize(t))), where
@@ -24,7 +26,7 @@ local ROOT = (debug.getinfo(1, "S").source:match("^@(.*)tools[/\\]build%.lua$"))
 M.ROOT = ROOT
 M.FILE = ROOT .. "packs/ShadowPriest.txt"
 
-M.VERSION = "1.5.0"
+M.VERSION = "1.5.1"
 M.FA_VERSION = "1.4.3" -- the ForeverAuras version the format was read from
 M.INTERNAL = 91        -- ForeverAuras.lua internalVersion (1.4.3)
 M.TOC = 16001
@@ -32,6 +34,9 @@ M.PREFIX = "Forever Auras | Shadow Priest"
 -- uids come from this key, not the shown name, so renaming the pack later
 -- still lets ForeverAuras offer "Update".
 M.UID_KEY = "ShadowPriest"
+-- Loads for Shadow and while levelling (no spec yet), never for Holy or
+-- Discipline, so it and the holy pack are never on screen together.
+M.SPEC_LOAD = { PRIEST_HOLY = false, PRIEST_DISCIPLINE = false }
 
 -- Every spell the pack uses. `rank1` is what goes into the triggers.
 M.SPELLS = {
@@ -59,6 +64,7 @@ M.SPELLS = {
 	-- priest spell (15 s, 5 min). Their buffs carry the spells' own IDs.
 	eluneLight = { id = 1259799, name = "Elune's Light" },
 	eluneGrace = { id = 2651, name = "Elune's Grace" },
+	eureka = { id = 1259823, name = "Eureka!" },                -- Gnome priests (8 s buff, 2 min)
 	-- Power Word: Shield (30 s, 4 s cooldown) and Weakened Soul (6788, 15 s:
 	-- can't be shielded again).
 	shield = { id = 17, name = "Power Word: Shield" },
@@ -86,6 +92,9 @@ M.RACIALS = {
 	{ id = 1277462, name = "Contingency Plan", race = "Gnome" },   -- 10 min
 	{ id = 1277324, name = "Dark Sacrifice", race = "Undead" },    -- 10 min
 	{ id = 1259799, name = "Elune's Light", race = "Night Elf" },  -- 3 min (the Night Elf racial)
+	-- Gnome priest racial (SkillLine 753, race mask 64): 2 min, 8 s of cheaper,
+	-- stronger non-periodic spells. Found while researching the holy pack.
+	{ id = 1259823, name = "Eureka!", race = "Gnome" },
 }
 
 -- Sizes and places (pixels, relative to the screen centre).
@@ -206,6 +215,16 @@ function M.ClickCode(macro, castID, buffIDs)
 end
 M.WEAVING_MAX = 5
 
+-- The pack the shared builders below are building: this one (Shadow) by
+-- default; tools/holy.lua switches to its own settings with M.UsePack while it
+-- builds. Each pack has PREFIX, UID_KEY, VERSION, COLOURS and LAYOUT.
+local C = M
+function M.UsePack(pack)
+	local previous = C
+	C = pack
+	return previous
+end
+
 -- uid: 11 characters like ForeverAuras' own, but fixed per display name.
 local ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()"
 function M.Uid(id)
@@ -226,7 +245,7 @@ end
 
 -- The uid key of a display: its name with the shown prefix swapped for UID_KEY.
 function M.UidKey(id)
-	if id:sub(1, #M.PREFIX) == M.PREFIX then return M.UID_KEY .. id:sub(#M.PREFIX + 1) end
+	if id:sub(1, #C.PREFIX) == C.PREFIX then return C.UID_KEY .. id:sub(#C.PREFIX + 1) end
 	return id
 end
 
@@ -240,6 +259,15 @@ end
 
 local function load(spellID)
 	local l = { use_class = true, class = { single = "PRIEST", multi = {} } }
+	-- Which talent tree loads the pack (ForeverAuras' Forever "Specialization"
+	-- load option, PlayerSpecialization.lua: your spec is the tree with 21+
+	-- points). true = load for it, false = never; only "never"s = every other
+	-- tree AND no spec yet (levelling).
+	if C.SPEC_LOAD then
+		local multi = {}
+		for key, value in pairs(C.SPEC_LOAD) do multi[key] = value end
+		l.use_forever_spec, l.forever_spec = false, { multi = multi }
+	end
 	if spellID then
 		l.use_spellknown = true
 		l.spellknown = spellID
@@ -252,7 +280,7 @@ end
 local function base(id, parent, regionType)
 	return {
 		id = id, uid = M.Uid(M.UidKey(id)), parent = parent, regionType = regionType,
-		internalVersion = M.INTERNAL, tocversion = M.TOC, semver = M.VERSION, version = 1,
+		internalVersion = M.INTERNAL, tocversion = M.TOC, semver = C.VERSION, version = 1,
 		author = "Forever Auras",
 		anchorFrameType = "SCREEN", anchorPoint = "CENTER", selfPoint = "CENTER",
 		xOffset = 0, yOffset = 0, alpha = 1, scale = 1, frameStrata = 1,
@@ -318,7 +346,7 @@ end
 -- A thin border round icons and bars (black unless a colour is given).
 local function border(c, parentType)
 	local b = { type = "subborder", border_visible = true, border_edge = "Square Full White",
-		border_color = c or M.COLOURS.border, border_offset = 0, border_size = 1 }
+		border_color = c or C.COLOURS.border, border_offset = 0, border_size = 1 }
 	if parentType == "aurabar" then b.anchor_area = "bar" end
 	return b
 end
@@ -384,28 +412,32 @@ local function auraIcon(id, parent, size, x, y, o)
 		{ trigger = trigger, untrigger = {} },
 		activeTriggerMode = 1, disjunctive = "all", secretFallback = "none",
 	}
+	if o.friendlyTarget then
+		-- Only while your target is friendly: a second trigger, both needed. The
+		-- aura trigger stays the one that draws the icon (activeTriggerMode 1).
+		d.triggers[2] = { trigger = { type = "unit", event = "Unit Characteristics", unit = "target", use_unit = true,
+			use_hostility = true, hostility = "friendly" }, untrigger = {} }
+	end
 	if o.click then
 		d.actions.init = { do_custom = true, custom = M.ClickCode(o.click.macro, o.click.cast, o.spells) }
 	end
-	local C = M.COLOURS
+	local K = C.COLOURS
 	local at = elements(d, {
 		{ "bg", { type = "subbackground" } },
 		{ "border", border(o.borderColour) },
-		{ "glow", (o.expire or o.glowAlways) and glow(o.glowAlways and C.proc or C.expiring, o.glowAlways) },
+		{ "glow", (o.expire or o.glowAlways) and glow(o.glowAlways and K.proc or K.expiring, o.glowAlways) },
 		{ "timer", o.timer ~= false and text("%p", "CENTER", math.floor(size * 0.42), 0, 0) },
 		{ "stacks", o.stacks and text("%s", "BOTTOMRIGHT", math.floor(size * 0.42), -2, 2) },
 	})
 	d.conditions = {}
 	if o.showOn == "showAlways" then
-		-- Missing: grey, faded and a red border, so the gap in the rotation stands out.
-		d.conditions[#d.conditions + 1] = {
-			check = { trigger = 1, variable = "faAuraActive", value = 0 },
-			changes = {
-				{ property = "desaturate", value = true },
-				{ property = "alpha", value = 0.5 },
-				{ property = "sub." .. at.border .. ".border_color", value = C.missing },
-			},
-		}
+		-- Missing: grey and faded, plus a red border so the gap in the rotation
+		-- stands out (o.calmMissing: grey only, e.g. a heal you could cast).
+		local changes = { { property = "desaturate", value = true }, { property = "alpha", value = 0.5 } }
+		if not o.calmMissing then
+			changes[#changes + 1] = { property = "sub." .. at.border .. ".border_color", value = K.missing }
+		end
+		d.conditions[#d.conditions + 1] = { check = { trigger = 1, variable = "faAuraActive", value = 0 }, changes = changes }
 	end
 	if o.expire then
 		-- Running out: the game lights the glow when fewer than `expire`
@@ -419,7 +451,7 @@ local function auraIcon(id, parent, size, x, y, o)
 		-- Full stacks: the stack number turns gold.
 		d.conditions[#d.conditions + 1] = {
 			check = { trigger = 1, variable = "faAuraApplications", op = ">=", value = tostring(o.stackFull) },
-			changes = { { property = "sub." .. at.stacks .. ".text_color", value = C.stackFull } },
+			changes = { { property = "sub." .. at.stacks .. ".text_color", value = K.stackFull } },
 		}
 	end
 	return d
@@ -456,7 +488,7 @@ local function cooldownIcon(id, parent, size, x, y, spell, showOn, needsTarget)
 	local at = elements(d, {
 		{ "bg", { type = "subbackground" } },
 		{ "border", border() },
-		{ "glow", always and glow(M.COLOURS.ready) },
+		{ "glow", always and glow(C.COLOURS.ready) },
 	})
 	if always then
 		d.conditions = {
@@ -490,8 +522,8 @@ local function castBar(id, parent, width, height, x, y)
 	d.load = load()
 	d.orientation, d.inverse = "HORIZONTAL", false
 	d.texture, d.textureSource = "Blizzard", "LSM"
-	d.barColor, d.barColor2 = color(0.58, 0.40, 0.90, 1), color(1, 1, 1, 1)
-	d.backgroundColor = color(0.04, 0.03, 0.07, 0.85)
+	d.barColor, d.barColor2 = color(unpack(C.COLOURS.cast)), color(1, 1, 1, 1)
+	d.backgroundColor = color(unpack(C.COLOURS.barBg or { 0.04, 0.03, 0.07, 0.85 }))
 	d.enableGradient, d.gradientOrientation = false, "HORIZONTAL"
 	d.icon, d.iconSource, d.icon_side, d.icon_color = false, -1, "LEFT", color(1, 1, 1, 1)
 	d.desaturate, d.zoom = false, 0
@@ -504,8 +536,8 @@ local function castBar(id, parent, width, height, x, y)
 		{ trigger = { type = "unit", event = "Cast", unit = "player", use_unit = true, spellNames = {} }, untrigger = {} },
 		activeTriggerMode = 1, disjunctive = "all",
 	}
-	local name = text("%n", "INNER_LEFT", M.LAYOUT.castFont, 5, 0)
-	local time = text("%p", "INNER_RIGHT", M.LAYOUT.castFont, -5, 0)
+	local name = text("%n", "INNER_LEFT", C.LAYOUT.castFont, 5, 0)
+	local time = text("%p", "INNER_RIGHT", C.LAYOUT.castFont, -5, 0)
 	time.text_text_format_p_time_precision = 1 -- 1.4 rather than 1
 	time.text_text_format_p_time_dynamic_threshold = 0
 	d.subRegions = { { type = "subbackground" }, { type = "subforeground" }, border(nil, "aurabar"), name, time }
@@ -528,8 +560,8 @@ local function manaBar(id, parent, width, height, x, y)
 	d.load = load()
 	d.orientation, d.inverse = "HORIZONTAL", false
 	d.texture, d.textureSource = "Blizzard", "LSM"
-	d.barColor, d.barColor2 = color(unpack(M.COLOURS.mana)), color(1, 1, 1, 1)
-	d.backgroundColor = color(0.04, 0.03, 0.07, 0.85)
+	d.barColor, d.barColor2 = color(unpack(C.COLOURS.mana)), color(1, 1, 1, 1)
+	d.backgroundColor = color(unpack(C.COLOURS.barBg or { 0.04, 0.03, 0.07, 0.85 }))
 	d.enableGradient, d.gradientOrientation = false, "HORIZONTAL"
 	d.icon, d.iconSource, d.icon_side, d.icon_color = false, -1, "LEFT", color(1, 1, 1, 1)
 	d.desaturate, d.zoom, d.spark = false, 0, false
@@ -543,11 +575,11 @@ local function manaBar(id, parent, width, height, x, y)
 	-- Left: your mana, shortened by the game (4,300 -> "4.3K"); Blizzard's
 	-- AbbreviateNumbers accepts the hidden numbers of combat
 	-- (SecretArguments = "AllowedWhenTainted" in its API documentation).
-	local amount = text("%p", "INNER_LEFT", M.LAYOUT.manaFont, 4, 0)
+	local amount = text("%p", "INNER_LEFT", C.LAYOUT.manaFont, 4, 0)
 	amount.text_text_format_p_format = "BigNumber"
 	amount.text_text_format_p_big_number_format = "AbbreviateNumbers"
 	-- Right: the percentage.
-	local pct = text("%percentpower%%", "INNER_RIGHT", M.LAYOUT.manaFont, -4, 0)
+	local pct = text("%percentpower%%", "INNER_RIGHT", C.LAYOUT.manaFont, -4, 0)
 	pct.text_text_format_percentpower_format = "Number"
 	pct.text_text_format_percentpower_decimal_precision = 0
 	pct.text_text_format_percentpower_round_type = "floor"
@@ -566,7 +598,7 @@ local function tickLine(id, parent, height, x, y)
 	d.load = load()
 	d.frameStrata = 5 -- above the cast bar
 	d.texture = "Interface\\Buttons\\WHITE8X8"
-	d.color = color(unpack(M.COLOURS.tick))
+	d.color = color(unpack(C.COLOURS.tick))
 	d.desaturate, d.blendMode, d.textureWrapMode = false, "BLEND", "CLAMPTOBLACKADDITIVE"
 	d.rotation, d.rotate, d.mirror = 0, false, false
 	d.triggers = {
@@ -591,7 +623,7 @@ local function executeFrame(id, parent, size, x, y, spell, percent)
 	d.frameStrata = 3 -- LOW: behind the icon (which inherits MEDIUM)
 	d.alpha = 0
 	d.texture = "Interface\\Buttons\\WHITE8X8"
-	d.color = color(unpack(M.COLOURS.execute))
+	d.color = color(unpack(C.COLOURS.execute))
 	d.desaturate, d.blendMode, d.textureWrapMode = false, "BLEND", "CLAMPTOBLACKADDITIVE"
 	d.rotation, d.rotate, d.mirror = 0, false, false
 	d.triggers = {
@@ -609,6 +641,24 @@ local function executeFrame(id, parent, size, x, y, spell, percent)
 	}
 	return d
 end
+
+-- Children listed group first, then that group's displays (the order
+-- ForeverAuras itself exports in), and the import table around them.
+function M.Ordered(root, children)
+	local ordered, byId = {}, {}
+	for _, d in ipairs(children) do byId[d.id] = d end
+	for _, gid in ipairs(root.controlledChildren) do
+		local g = byId[gid]
+		ordered[#ordered + 1] = g
+		for _, cid in ipairs(g.controlledChildren or {}) do ordered[#ordered + 1] = byId[cid] end
+	end
+	return { m = "d", v = 2000, s = M.FA_VERSION, d = root, c = ordered }
+end
+
+-- The shared builders, for the other packs (tools/holy.lua).
+M.H = { color = color, load = load, base = base, group = group, row = row, text = text, border = border, glow = glow,
+	elements = elements, icon = icon, auraIcon = auraIcon, cooldownIcon = cooldownIcon, castBar = castBar,
+	manaBar = manaBar, tickLine = tickLine, executeFrame = executeFrame }
 
 function M.Build()
 	local S, L, P = M.SPELLS, M.LAYOUT, M.PREFIX
@@ -662,6 +712,7 @@ function M.Build()
 	proc(S.spiritTap, S.spiritTapTalent.id, 0, 0)
 	proc(S.focus, S.focus.id, 0, -cell, false) -- lasts until your next spell: no timer
 	proc(S.eluneLight, S.eluneLight.id, -cell, 0)
+	proc(S.eureka, S.eureka.id, -cell, 0) -- Gnome: same spot as Elune's Light (no priest has both)
 	proc(S.eluneGrace, S.eluneGrace.id, -cell, -cell)
 
 	-- Shield, right of the rotation row: Power Word: Shield on you (anyone's)
@@ -748,16 +799,7 @@ function M.Build()
 		.. "hidden."
 	root.groupIcon = "Interface\\Icons\\Spell_Shadow_Shadowform"
 
-	-- Children are listed group first, then that group's displays (the order
-	-- ForeverAuras itself exports in).
-	local ordered, byId = {}, {}
-	for _, d in ipairs(children) do byId[d.id] = d end
-	for _, gid in ipairs(root.controlledChildren) do
-		local g = byId[gid]
-		ordered[#ordered + 1] = g
-		for _, cid in ipairs(g.controlledChildren or {}) do ordered[#ordered + 1] = byId[cid] end
-	end
-	return { m = "d", v = 2000, s = M.FA_VERSION, d = root, c = ordered }
+	return M.Ordered(root, children)
 end
 
 -- Codec ----------------------------------------------------------------------
@@ -793,8 +835,10 @@ end
 -- The README carries a copy of the import string between these markers, so
 -- it can be copied with GitHub's copy button (easier on a phone).
 M.README = ROOT .. "README.md"
-M.MARK_START = "<!-- pack:ShadowPriest start (written by tools/build.lua) -->"
-M.MARK_END = "<!-- pack:ShadowPriest end -->"
+function M.Marks(key)
+	return "<!-- pack:" .. key .. " start (written by tools/build.lua) -->", "<!-- pack:" .. key .. " end -->"
+end
+M.MARK_START, M.MARK_END = M.Marks("ShadowPriest")
 
 local function readFile(path)
 	local f = io.open(path, "rb")
@@ -808,57 +852,92 @@ M.ReadFile = readFile
 local function plain(s) return (s:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")) end
 
 -- The README with the import string block replaced (nil if no markers).
-function M.ReadmeWith(readme, s)
-	local block = M.MARK_START .. "\n```text\n" .. s .. "\n```\n" .. M.MARK_END
-	local out, n = readme:gsub(plain(M.MARK_START) .. ".-" .. plain(M.MARK_END), function() return block end)
+function M.ReadmeWith(readme, s, key)
+	local first, last = M.Marks(key or "ShadowPriest")
+	local block = first .. "\n```text\n" .. s .. "\n```\n" .. last
+	local out, n = readme:gsub(plain(first) .. ".-" .. plain(last), function() return block end)
 	if n ~= 1 then return nil end
 	return out
 end
 
-local function main(args)
-	local s = M.Encode(M.Build())
-	local readme = readFile(M.README)
-	local newReadme = readme and M.ReadmeWith(readme, s)
-	if args[1] == "--layout" then
-		-- Icon places on screen, for tools/layout.js (the README picture).
-		local t = M.Build()
-		local byId = { [t.d.id] = t.d }
-		for _, d in ipairs(t.c) do byId[d.id] = d end
-		local rows = {}
-		for _, d in ipairs(t.c) do
-			if d.regionType == "icon" or d.regionType == "aurabar" or d.regionType == "texture" then
-				local x, y, p = d.xOffset, d.yOffset, byId[d.parent]
-				local dynamic = p.regionType == "dynamicgroup"
-				local rowName = p == t.d and d.id:match("| ([^|]+)$") or d.parent:match("| ([^|]+)$")
-				while p do x, y, p = x + p.xOffset, y + p.yOffset, byId[p.parent] end
-				rows[#rows + 1] = ('{"name":"%s","x":%g,"y":%g,"w":%g,"h":%g,"row":"%s","dynamic":%s}'):format(
-					d.id:match("| ([^|]+)$"), x, y, d.width, d.height, rowName, tostring(dynamic))
-			end
+-- Every pack this repository builds.
+function M.Packs()
+	local holy = dofile(ROOT .. "tools/holy.lua")(M)
+	return {
+		{ key = "ShadowPriest", file = M.FILE, build = M.Build },
+		{ key = holy.KEY, file = holy.FILE, build = holy.Build },
+	}
+end
+
+-- Icon and bar places on screen, for tools/layout.js (the README pictures).
+local function layoutJSON(t)
+	local byId = { [t.d.id] = t.d }
+	for _, d in ipairs(t.c) do byId[d.id] = d end
+	local rows = {}
+	for _, d in ipairs(t.c) do
+		if d.regionType == "icon" or d.regionType == "aurabar" or d.regionType == "texture" then
+			local x, y, p = d.xOffset, d.yOffset, byId[d.parent]
+			local dynamic = p.regionType == "dynamicgroup"
+			local rowName = p == t.d and d.id:match("| ([^|]+)$") or d.parent:match("| ([^|]+)$")
+			while p do x, y, p = x + p.xOffset, y + p.yOffset, byId[p.parent] end
+			rows[#rows + 1] = ('{"name":"%s","x":%g,"y":%g,"w":%g,"h":%g,"row":"%s","dynamic":%s}'):format(
+				d.id:match("| ([^|]+)$"), x, y, d.width, d.height, rowName, tostring(dynamic))
 		end
-		print("[" .. table.concat(rows, ",") .. "]")
-		return
+	end
+	return "[" .. table.concat(rows, ",") .. "]"
+end
+
+local function main(args)
+	local packs = M.Packs()
+	if args[1] == "--layout" then
+		local want = args[2] or "ShadowPriest"
+		for _, pack in ipairs(packs) do
+			if pack.key == want then print(layoutJSON(pack.build())) return end
+		end
+		error("no pack named " .. want)
+	end
+	local readme = readFile(M.README)
+	local newReadme = readme
+	local strings = {}
+	for i, pack in ipairs(packs) do
+		strings[i] = M.Encode(pack.build())
+		if newReadme then
+			local updated = M.ReadmeWith(newReadme, strings[i], pack.key)
+			if updated then newReadme = updated
+			else io.stderr:write("README.md has no markers for " .. pack.key .. ": its copy was not updated\n") end
+		end
 	end
 	if args[1] == "--check" then
-		local old = readFile(M.FILE) or ""
-		if old:gsub("%s+$", "") ~= s or newReadme ~= readme then
-			io.stderr:write("packs/ShadowPriest.txt or README.md is out of date: run lua5.1 tools/build.lua\n")
+		local stale = false
+		for i, pack in ipairs(packs) do
+			local old = readFile(pack.file) or ""
+			if old:gsub("%s+$", "") ~= strings[i] then
+				stale = true
+				io.stderr:write(pack.file .. " is out of date\n")
+			end
+		end
+		if newReadme ~= readme then
+			stale = true
+			io.stderr:write("README.md is out of date\n")
+		end
+		if stale then
+			io.stderr:write("run lua5.1 tools/build.lua\n")
 			os.exit(1)
 		end
-		print("packs/ShadowPriest.txt and README.md are up to date")
+		print("packs and README.md are up to date")
 		return
 	end
-	local f = assert(io.open(M.FILE, "wb"))
-	f:write(s, "\n")
-	f:close()
-	if newReadme then
-		f = assert(io.open(M.README, "wb"))
+	for i, pack in ipairs(packs) do
+		local f = assert(io.open(pack.file, "wb"))
+		f:write(strings[i], "\n")
+		f:close()
+		print(("Wrote %s: %d displays, %d characters"):format(pack.file, #pack.build().c + 1, #strings[i]))
+	end
+	if newReadme and newReadme ~= readme then
+		local f = assert(io.open(M.README, "wb"))
 		f:write(newReadme)
 		f:close()
-	elseif readme then
-		io.stderr:write("README.md has no pack markers: its copy was not updated\n")
 	end
-	local t = M.Build()
-	print(("Wrote %s: %d displays, %d characters"):format(M.FILE, #t.c + 1, #s))
 end
 
 if arg and arg[0] and arg[0]:match("build%.lua$") then main(arg) end

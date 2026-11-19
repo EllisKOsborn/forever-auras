@@ -12,3 +12,4 @@ files["tests/fa-check.lua"] = {
 }
 files["tools/build.lua"] = { read_globals = { "LibStub" } }
 files["tests/**/*_spec.lua"] = { std = "+busted" }
+files["tests/rules.lua"] = { std = "+busted" }

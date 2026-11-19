@@ -1,5 +1,20 @@
 # Changelog
 
+## Holy Priest v1.0.0 (19 Nov 2026)
+New pack, same style as the shadow one in gold. Not tested in game yet.
+- On your friendly target: your Renew, Power Word: Shield and Weakened Soul.
+- Prayer of Mending and Inner Focus: grey while cooling down, gold glow when
+  ready in a fight.
+- Inner Focus, Power Infusion and race buffs while up; your own shield and
+  Weakened Soul; gold cast bar (hides the game's); taller mana bar; cooldowns
+  with Fear Ward and your race's spells; clickable missing-buff reminders.
+- Loads for a Holy or Discipline spec only.
+
+## Shadow Priest v1.5.1 (19 Nov 2026)
+- Loads for Shadow and while levelling, and hides for a Holy or Discipline
+  spec (where the holy pack shows instead).
+- Gnome priests: **Eureka!** shows while active and in the cooldown row.
+
 ## Shadow Priest v1.5.0 (17 Nov 2026)
 - **Hides the game's own cast bar** while the pack is loaded, so you only see
   the pack's. Untick **Hide the game's cast bar** (`/fa` → Cast bar → Custom

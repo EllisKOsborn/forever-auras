@@ -149,8 +149,8 @@ describe("Shadow priest pack", function()
 			end
 		end)
 
-		it("there are 17 of them (4 on the target, 7 reminders, 4 procs, 2 shield)", function()
-			assert.equal(17, #modern)
+		it("there are 18 of them (4 on the target, 7 reminders, 5 procs, 2 shield)", function()
+			assert.equal(18, #modern)
 		end)
 
 		it("use a supported display type, unit, buff/debuff and filters", function()
@@ -379,7 +379,7 @@ describe("Shadow priest pack", function()
 		it("include your race's priest spells, each only when known", function()
 			local byName = {}
 			for _, d in ipairs(pack.c) do byName[d.id] = d end
-			assert.equal(10, #B.RACIALS) -- 9 priest race spells + Elune's Light
+			assert.equal(11, #B.RACIALS) -- 9 priest race spells + Elune's Light + Eureka!
 			for _, r in ipairs(B.RACIALS) do
 				local d = byName[B.PREFIX .. " | Cooldowns | " .. r.name]
 				assert.truthy(d, r.name)

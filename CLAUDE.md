@@ -16,7 +16,7 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
 - **Never claim anything works in game** until they confirm it. So far
   everything is checked only against ForeverAuras' rules read from its source.
 
-## Status (17 Nov 2026, v1.5.0)
+## Status (19 Nov 2026: Shadow v1.5.1, Holy v1.0.0)
 - **Shadow Priest v1.0.0**: owner imported it in game on 17 Nov 2026,
   "works fine it seems" (no item-by-item report yet).
 - **Shadow Priest v1.1.0**: cast bar (owner's request). v1.2.0 renamed to
@@ -40,6 +40,16 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   switch; Forever Aura HUD's Casting.lua does the same) and hooks it, since
   `EndReplacingPlayerBar` turns it back on. Author option (toggle)
   `hideGameCastBar`, default on; unticking restores the bar once.
+- **Holy Priest v1.0.0** (19 Nov, owner's off-spec): `tools/holy.lua`,
+  `packs/HolyPriest.txt`, 40 displays, gold theme. Not tested in game. Shadow
+  v1.5.1 the same day: load by spec + Eureka!.
+- **Load by spec** (both packs, `SPEC_LOAD`): FA's Forever load option
+  `forever_spec` (PlayerSpecialization.lua: spec = tree with 21+ points, from
+  final-tier talents: Shadowform = Shadow, Prayer of Mending = Holy, Power
+  Infusion = Discipline). Stored as `use_forever_spec = false` +
+  `forever_spec.multi = { KEY = true|false }`; only `false`s = every other
+  tree **and no spec**. Shadow: Holy/Disc false (so it shows while levelling);
+  Holy: Holy/Disc true. Never both at once (tested in holy_spec).
 - `tests/fa-check.lua` (runs FA's real `Display.Validate`) was written but
   **not run**: running downloaded third-party code was blocked in the cloud
   session. Ask the owner before running it, or before adding it to CI.
@@ -167,13 +177,47 @@ WeakAuras (github.com/neroxrw/foreverauras, GPL v2, CurseForge project
   Forever it helps only the casting priest (Blizzard deep dive), so it uses
   the `PLAYER` filter like the DoTs (fixed in v1.2.1).
 
+## Holy priest decisions (v1.0.0)
+- Sources: WarcraftTavern Forever holy guide (Cyradys: no fixed rotation;
+  Renew, PW:Shield on tank, Flash/Greater Heal, Inner Focus with big heals,
+  Prayer of Mending capstone; build 18/33/0; Litany of Light rewards
+  alternating heals; Holy Binding 1328569 makes Flash Heal heal you too),
+  Blizzard deep dive (Binding Heal 16-pt talent, PoM 31-pt, Lightwell
+  removed), Forever data.
+- IDs: Renew 139 (15 s); PoM 401859 / 1240826 / 1240827 (10 s cd; auras
+  401877 / 1240848 / 1240849, 30 s); Fear Ward 6346 (every race, 3 min);
+  Power Infusion 10060; Eureka! 1259823 (Gnome priest racial, 8 s, 2 min,
+  SkillLine 753 race 64; added to the shared `RACIALS`).
+- Not used: Binding Heal 401937/1240770… and Surge of Light 431664/431666
+  (no SkillLineAbility: not learnable in Forever), Lightwell (removed),
+  Spirit of Redemption (you're dead).
+- Middle row is about your **friendly target** (2nd trigger: Unit
+  Characteristics target `hostility = "friendly"`, option `friendlyTarget`)
+  plus PoM / Inner Focus ready. Missing Renew/Shield = grey only
+  (`calmMissing`: not a warning for a healer). Weakened Soul on a target is
+  matched by spell ID (allowed; only player/pet debuffs aren't).
+- Not built (offered to the owner): Renew/shield tracking on party/raid
+  frames (FA can anchor to unit frames; bigger job).
+
+## Code structure
+- `tools/build.lua`: shared builders (`M.H`), codec, README boxes, main; the
+  shadow pack's data and `M.Build`. Builders read the pack being built from a
+  local `C` (`M.UsePack(pack)` switches it): `PREFIX`, `UID_KEY`, `VERSION`,
+  `COLOURS` (incl. `cast`, optional `barBg`), `LAYOUT` (`castFont`,
+  `manaFont`), `SPEC_LOAD`. `M.Packs()` lists every pack; `--layout <KEY>`.
+- `tools/holy.lua` returns `function(B) ... end` (B = build.lua's module):
+  don't `dofile` build.lua from it (main would run again).
+- Changing the shared builders changes both packs: check both imports.
+
 ## Layout
 ```
-packs/      import strings (generated)
-tools/      build.lua (the pack, codec, --check, --layout), layout.js (docs/layout.png from --layout)
-tests/      pack_spec.lua (busted), fa-check.lua (optional, needs FA source)
+packs/      import strings (generated): ShadowPriest.txt, HolyPriest.txt
+tools/      build.lua (shared builders, codec, shadow pack, --check, --layout <pack>),
+            holy.lua (holy pack), layout.js (docs/layout*.png; `node tools/layout.js [KEY]`)
+tests/      rules.lua (ForeverAuras rules for any pack), shadow_rules_spec.lua,
+            pack_spec.lua (shadow), holy_spec.lua, fa-check.lua (optional, needs FA source)
 vendor/     LibStub, LibSerialize, LibDeflate (licences inside)
-docs/       layout.png
+docs/       layout.png (shadow), layout-holy.png
 ```
 
 ## Dev environment (cloud sessions)
